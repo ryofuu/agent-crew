@@ -1,7 +1,7 @@
 ---
 id: TICKET-004
 title: "Workflow Engine Module: ワークフロー定義パースと状態機械"
-status: dev_done
+status: closed
 assignee: "implementer-1"
 priority: high
 depends_on: [TICKET-002]
@@ -173,3 +173,46 @@ type WorkflowState = {
 3. `state.ts` — `WorkflowStateSchema` を Zod で定義、`readState` で `safeParse` に置換
 4. `writeConfig` — atomic write（tmp→rename）パターンに修正
 5. `yaml.load` — `{ schema: yaml.JSON_SCHEMA }` を明示的に指定（WorkflowEngine, config.ts 両方）
+
+### Round 2 (2026-02-25T15:08:51+09:00)
+
+**Verdict**: CHANGES_REQUESTED
+
+#### Code Quality
+- [medium] `tests/workflow/schema.test.ts:14` — テストで `yaml.load(raw)` が `{ schema: yaml.JSON_SCHEMA }` なしで使用。本番コードとの一貫性がない
+- [medium] `src/workflow/state.ts:57-75` — `writeState` が書き込み前に Zod バリデーションを行わない。不正データが永続化されると次回 `readState` で失敗する
+
+#### Security
+- なし。R1 の全問題（path traversal, yaml.load schema, unsafe cast, non-atomic write）は正しく修正されている
+
+#### Architecture
+- [high] `src/workflow/WorkflowEngine.ts:11-22` — `WorkflowEnginePort` がimplementation ファイル内に定義。Port パターン（`TaskStorePort` が `types.ts` にあるのと同様）に従い `src/workflow/types.ts` に分離すべき
+- [medium] `src/workflow/WorkflowEngine.ts:204-234` — `evaluateLoopOrClose` で `MAX_CYCLES_EXCEEDED` 時に `state.status = "error"` をメモリ上で変更するが、`advance()` (L116) が `err` を即座に return するため `writeState` (L120) に到達せず、エラー状態がディスクに永続化されない
+- [medium] `src/workflow/state.ts:49,53` — `readState` のエラーメッセージが `WorkflowErrors` 定数を使用していない。プログラム的なエラーハンドリングが困難
+
+#### Required Changes
+1. [src/workflow/WorkflowEngine.ts:204-234] `evaluateLoopOrClose` で `MAX_CYCLES_EXCEEDED` 時、`writeState` を呼んでからエラーを返す。または `advance()` のエラーハンドリング後に状態を永続化する
+2. [src/workflow/WorkflowEngine.ts:11-22] `WorkflowEnginePort` を `src/workflow/types.ts` に分離（Port パターン一貫性）
+
+## Re-implementation Notes (Round 3)
+
+1. `WorkflowEnginePort` を `src/workflow/types.ts` に分離。`WorkflowEngine.ts` は `types.ts` から import、barrel file (`index.ts`) も `types.ts` から re-export に変更
+2. `advance()` 内で `evaluateLoopOrClose` がエラーを返した場合、`writeState` を呼んでエラー状態をディスクに永続化してからエラーを return するよう修正
+
+### Round 3 (2026-02-25T17:00:00+09:00)
+
+**Verdict**: APPROVED
+
+#### Code Quality
+- [medium] `advance()` L107 で `writeState` の `Result` 戻り値が破棄されている。永続化失敗時にエラーが隠蔽される。`writeState` 失敗は稀だが、Result 規約上は戻り値チェックが望ましい
+- [medium] `MAX_CYCLES_EXCEEDED` テスト（tests/workflow/WorkflowEngine.test.ts）がエラー返却のみ検証し、状態がディスクに永続化されたこと（R3 修正の本質）を検証していない。`getState()` で `status: "error"` を assert すべき
+
+#### Security
+- なし。R1/R2 の全問題（path traversal, yaml.load schema, unsafe cast, non-atomic writeConfig）修正済みを確認
+
+#### Architecture
+- [medium] `types.ts` の `WorkflowEnginePort` が `state.ts` の `StageState`, `WorkflowState` を import。Port 定義が実装詳細に依存しており、依存方向が逆転。理想的には型定義を `types.ts` に集約し `state.ts` が `types.ts` から import する構造。同一モジュール内のため実害は小さい
+- [medium] `runner` モジュールの `AgentRunnerPort`/`TmuxPort` が未だ実装ファイル内定義。`store`/`workflow` と Port パターン不一致。後続チケットで統一推奨（TICKET-004 スコープ外）
+
+#### Required Changes
+なし

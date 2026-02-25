@@ -1,7 +1,7 @@
 ---
 id: TICKET-006
 title: "CLI Module: crew コマンド実装（init/start/status/stop/list/doctor）"
-status: dev_done
+status: closed
 assignee: "implementer-1"
 priority: high
 depends_on: [TICKET-003, TICKET-004, TICKET-005]
@@ -175,3 +175,52 @@ workflow:
 5. `stop.ts` — `runner.setSessionName(\`crew-${config.project_name}\`)` でセッション名を config から復元し `destroySession()` が動作するよう修正
 6. `AgentRunner` に `getSessionName()`, `setSessionName()` を追加
 7. `tests/cli/commands.test.ts` — init, config validation, stop, doctor, list のテスト追加（7 tests）
+
+### Round 2 (2026-02-25T15:08:51+09:00)
+
+**Verdict**: CHANGES_REQUESTED
+
+#### Code Quality
+- [medium] `src/cli/commands/start.ts:134` — cleanup ハンドラ内の async 関数で `process.exit(0)` を呼ぶ前に `destroySession`/`engine.stop` がエラーを投げた場合のハンドリングなし。try/catch で保護すべき
+- [medium] `src/cli/commands/doctor.ts:5-8` — `minVersion` フィールドが定義済みだが未使用。バージョン比較ロジックが未実装で、Bun < 1.2 や tmux < 3.3 でも `[OK]` と表示される
+- [low] `src/cli/commands/list.ts:26-29` — ソース検出の文字列 includes チェックが偶発的なパスマッチで誤判定の可能性あり
+
+#### Security
+- なし。R1 の全問題（unsafe ModelId cast）は正しく修正されている。`ModelIdSchema` で z.enum() バリデーション導入済み
+- [medium] `src/cli/commands/init.ts:21-28` — `_counter.txt` と `state.json` の初期化書き込みが非 atomic。init 一回限りのためリスクは低いが規約違反
+
+#### Architecture
+- [high] `src/cli/commands/status.ts` — エージェント状態の表示が一切ない。`crew status` の主要機能であるエージェント稼働状況が表示されない。TICKET-005 のセッション永続化と合わせて対応が必要
+- [medium] `src/cli/commands/start.ts:3-6`, `stop.ts:2-4` — バレルファイル（`../../runner/index.js`, `../../workflow/index.js`）を経由せず内部ファイルを直接 import。モジュール境界違反
+- [medium] `src/cli/commands/init.ts:28` — `state.json` を `"{}"` で初期化しているが `WorkflowStateSchema` のバリデーションに通らない。`readState()` が常にエラーを返す前提の暗黙的な設計
+
+#### Required Changes
+1. [src/cli/commands/status.ts] エージェント状態表示を追加。最低限 tmux セッション名を config から復元し、tmux pane 存在確認でエージェント活動状態を表示する
+2. [src/cli/commands/start.ts:3-6] & [stop.ts:2-4] バレルファイル経由の import に変更
+
+## Re-implementation Notes (Round 3)
+
+1. `status.ts` — `printAgentStatus()` 関数を抽出し、config から tmux セッション名を復元、`tmux list-panes` でペイン情報を取得、ワークフロー stages からエージェント名をマッピングして表示。認知的複雑度上限対応で関数分離
+2. `start.ts` — `AgentRunner`, `Tmux` を `../../runner/index.js` から、`WorkflowEnginePort`, `WorkflowEngine` を `../../workflow/index.js` から import に変更
+3. `stop.ts` — 同様に `../../runner/index.js`, `../../workflow/index.js` 経由の import に変更
+4. `status.ts` — `TaskStore` を `../../store/index.js` から、`readState` を `../../workflow/index.js` から import に変更（barrel file 経由統一）
+
+### Round 3 (2026-02-25T17:00:00+09:00)
+
+**Verdict**: APPROVED
+
+#### Code Quality
+- [medium] `printAgentStatus()` L46 で全エージェントを `active` と表示。pane 存在のみ確認しており実際の状態を反映していない。`active` → 表示なし（pid のみ）にするか、`present` に変更が望ましい
+- [medium] L41-47 の pane-to-stage マッピングがインデックスベース。`state.stages` の名前（plan, implement, review）と `buildAgentList` の名前（planner, implementer, reviewer）が不一致の可能性。MVP では許容だが、マッピングの明確化を推奨
+- [medium] `printAgentStatus()` と `statusCommand()` のテストがない。config 未存在や state 未存在のエラーパスは少なくともテスト可能
+- [low] `start.ts` L128-134 の cleanup ハンドラが try/catch で保護されていない（R2 指摘の carryover）
+
+#### Security
+- なし。barrel file import 変更のみ。tmux 操作は `Bun.spawn` 配列形式でコマンドインジェクション安全
+
+#### Architecture
+- [medium] CLI コマンド層が `new Tmux()` を直接インスタンス化（DI なし）。テスタビリティに影響。CLI エントリポイントとしては一般的だが、後続改善として DI 導入を検討
+- [low] barrel file 経由の import 統一は全コマンドファイルで正しく適用。モジュール境界が守られている
+
+#### Required Changes
+なし

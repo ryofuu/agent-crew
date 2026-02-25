@@ -1,7 +1,7 @@
 ---
 id: TICKET-003
 title: "Task Store Module: タスクファイル CRUD + ステータス遷移バリデーション"
-status: dev_done
+status: closed
 assignee: "implementer-1"
 priority: high
 depends_on: [TICKET-002]
@@ -152,3 +152,48 @@ labels: []
 5. `TaskStoreErrors` に `READ_FAILED`, `INVALID_ID` を追加
 6. watch テスト追加（mtime 変更検知のコールバック発火を検証）
 7. ID バリデーションテスト追加（不正 ID でのget/update 拒否を検証）
+
+### Round 2 (2026-02-25T15:08:51+09:00)
+
+**Verdict**: CHANGES_REQUESTED
+
+#### Code Quality
+- [high] `src/store/TaskStore.ts:30-38` — `getTaskFilePath()` がパストラバーサル検出時に `throw` を使用。プロジェクト規約「Result 型でエラーハンドリング（throw しない）」に違反。さらに `create()` (L105) が `getTaskFilePath()` 呼び出し前に `validateTaskId()` を呼んでいないため、不正IDがガード節なしで `getTaskFilePath` に到達可能
+- [medium] `src/store/types.ts:4-36` — `TaskFrontmatterSchema` と `TaskFrontmatter` インターフェースが同一形状を二重定義。`z.infer<typeof TaskFrontmatterSchema>` で単一ソースに統一すべき
+- [low] `src/store/TaskStore.ts:224` — watch ポーリング間隔 1000ms がマジックナンバー。名前付き定数に抽出すべき
+
+#### Security
+- なし。R1 の全 critical/high 問題（gray-matter eval injection, path traversal, unsafe cast）は正しく修正されている
+
+#### Architecture
+- [medium] `src/store/TaskStore.ts:49-66` — `nextId()` の read-increment-write が非アトミック。複数エージェント並行アクセス時に重複 ID 生成のリスクあり（TOCTOU）
+- [medium] `src/store/types.ts:4-23` — `TaskFrontmatterSchema` の status/priority enum 値が `kernel/types.ts` と重複定義。kernel で const array を定義し参照すべき
+
+#### Required Changes
+1. [src/store/TaskStore.ts:105] `create()` 内で `getTaskFilePath()` 呼び出し前に `validateTaskId(id)` を追加
+2. [src/store/TaskStore.ts:30-38] `getTaskFilePath()` の `throw` を `Result` パターンに変更するか、全呼び出し元で事前に `validateTaskId()` を保証する（最小修正: create() に validateTaskId 追加）
+
+## Re-implementation Notes (Round 3)
+
+1. `create()` に `validateTaskId(id)` を `getTaskFilePath(id)` 呼び出し前に追加。これにより `get()`, `update()`, `create()` の全呼び出し元で `getTaskFilePath` 到達前に ID バリデーションが保証される
+2. `getTaskFilePath()` の `throw` は防御的最終ガードとして残留。全呼び出し元での事前バリデーションにより到達不能
+
+### Round 3 (2026-02-25T17:00:00+09:00)
+
+**Verdict**: APPROVED
+
+#### Code Quality
+- [medium] `getTaskFilePath()` (L30-37) が public メソッドかつ `TaskStorePort` インターフェースに定義されているため、外部から直接呼び出して `throw` に到達可能。全内部呼び出し元は `validateTaskId()` で保護済みのため実害なし。将来的に `Result<string, string>` への変更を推奨
+- [medium] `create()` L87-88 の `validateTaskId(id)` は `nextId()` が常に有効な ID を生成するため到達不能な防御コード。契約保証としては正当だが、意図を示すコメントがあるとより良い
+- [low] watch ポーリング間隔 1000ms (L227) がマジックナンバー。名前付き定数推奨（既知の pre-existing issue）
+- [low] `create()` の validateTaskId ガードに対するテストがない（nextId() 経由では発火不能のため書きにくいが、防御意図のドキュメント化として有益）
+
+#### Security
+- なし。R1/R2 の全 critical/high 問題（gray-matter eval injection, path traversal, unsafe cast）修正済みを確認
+
+#### Architecture
+- [low] `TaskFrontmatterSchema` と `TaskFrontmatter` インターフェースの二重定義（R2 指摘）は未対応。`z.infer` 統一を後続チケットで推奨
+- [low] `nextId()` TOCTOU（R2 指摘）は未対応。シングルプロセス前提では問題なし。マルチエージェント並行アクセス時に要対応
+
+#### Required Changes
+なし
