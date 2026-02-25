@@ -65,7 +65,7 @@ crew stop
 | Command | Description |
 |---------|-------------|
 | `crew init [--force]` | Initialize `.crew/` directory in current project |
-| `crew start <workflow> "<goal>"` | Start a workflow with the given goal |
+| `crew start <workflow> "<goal>" [--auto-approve] [--nudge-interval <sec>]` | Start a workflow with the given goal |
 | `crew status` | Show workflow state, tasks, and agent status |
 | `crew stop [--force]` | Stop all agents and destroy tmux session |
 | `crew list` | List available workflow definitions |
@@ -176,16 +176,15 @@ stages:
 
 ### Workflow Resolution Order
 
-1. Project: `.crew/workflows/`
+1. Project: `.crew/workflows/` (optional, create manually if needed)
 2. User: `~/.crew/workflows/`
 3. Built-in: `templates/`
 
 ## Configuration
 
-After `crew init`, edit `.crew/config.yaml`:
+Global config at `~/.crew/config.yaml` (created by `crew init` if absent):
 
 ```yaml
-project_name: my-project
 defaults:
   planner_model: claude-opus-4-6
   implementer_model: codex-1
@@ -193,11 +192,16 @@ defaults:
 tmux:
   session_prefix: crew
 agent:
-  nudge_interval_seconds: 300
-  max_escalation_phase: 3
+  nudge_interval_seconds: 300  # idle detection interval (override with --nudge-interval)
+  max_escalation_phase: 3      # max nudge attempts per stage
+  auto_approve: false
 workflow:
   poll_interval_seconds: 5
 ```
+
+The project name is derived from the current directory name (`path.basename(cwd)`).
+
+Set `CREW_HOME` environment variable to override the default `~/.crew` location.
 
 ## Architecture
 
@@ -205,7 +209,7 @@ workflow:
 src/
 ├── cli/           # CLI Module (commander.js)
 │   ├── commands/  # init, start, status, stop, list, doctor
-│   └── config.ts  # .crew/config.yaml read/write
+│   └── config.ts  # ~/.crew/config.yaml read/write
 ├── workflow/      # Workflow Engine — state machine, YAML parsing
 ├── runner/        # Agent Runner — tmux management, agent spawn/stop
 ├── store/         # Task Store — CRUD, status transitions, file watch

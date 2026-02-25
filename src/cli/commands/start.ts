@@ -318,6 +318,7 @@ async function pollLoop(
 
 interface StartOptions {
 	autoApprove?: boolean;
+	nudgeInterval?: number;
 }
 
 export async function startCommand(
@@ -421,7 +422,9 @@ export async function startCommand(
 	process.on("SIGTERM", cleanup);
 
 	const pollInterval = config.workflow.poll_interval_seconds * 1000;
-	const nudgeIntervalMs = config.agent.nudge_interval_seconds * 1000;
+	const nudgeIntervalSeconds =
+		options?.nudgeInterval ?? config.agent.nudge_interval_seconds;
+	const nudgeIntervalMs = nudgeIntervalSeconds * 1000;
 	const maxNudges = config.agent.max_escalation_phase;
 	await pollLoop(
 		engine,

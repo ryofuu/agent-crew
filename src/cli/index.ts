@@ -26,6 +26,11 @@ export function createCLI(): Command {
 		.argument("<workflow>", "Workflow name (e.g., dev-cycle)")
 		.argument("<goal>", "Goal description")
 		.option("--auto-approve", "Run all agents in auto-approve mode")
+		.option(
+			"--nudge-interval <seconds>",
+			"Override nudge interval in seconds",
+			Number.parseInt,
+		)
 		.action(startCommand);
 
 	program

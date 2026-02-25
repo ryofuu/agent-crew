@@ -65,7 +65,7 @@ crew stop
 | コマンド | 説明 |
 |---------|------|
 | `crew init [--force]` | `.crew/` ディレクトリをプロジェクトに作成 |
-| `crew start <workflow> "<goal>"` | ワークフローを開始 |
+| `crew start <workflow> "<goal>" [--auto-approve] [--nudge-interval <sec>]` | ワークフローを開始 |
 | `crew status` | ワークフロー状態・タスク一覧・エージェント状態を表示 |
 | `crew stop [--force]` | 全エージェント停止、tmux セッション破棄 |
 | `crew list` | 利用可能なワークフロー定義を一覧表示 |
@@ -175,16 +175,15 @@ stages:
 
 ### ワークフロー解決順序
 
-1. プロジェクト: `.crew/workflows/`
+1. プロジェクト: `.crew/workflows/`（任意、必要に応じて手動作成）
 2. ユーザー: `~/.crew/workflows/`
 3. ビルトイン: `templates/`
 
 ## 設定
 
-`crew init` 後に `.crew/config.yaml` を編集:
+グローバル設定は `~/.crew/config.yaml`（`crew init` で未存在時に自動作成）:
 
 ```yaml
-project_name: my-project
 defaults:
   planner_model: claude-opus-4-6
   implementer_model: codex-1
@@ -192,11 +191,16 @@ defaults:
 tmux:
   session_prefix: crew
 agent:
-  nudge_interval_seconds: 300
-  max_escalation_phase: 3
+  nudge_interval_seconds: 300  # idle 検知間隔（--nudge-interval で上書き可）
+  max_escalation_phase: 3      # ステージあたりの最大ナッジ回数
+  auto_approve: false
 workflow:
   poll_interval_seconds: 5
 ```
+
+プロジェクト名はカレントディレクトリ名（`path.basename(cwd)`）から自動取得。
+
+`CREW_HOME` 環境変数でデフォルトの `~/.crew` を変更可能。
 
 ## アーキテクチャ
 
@@ -204,7 +208,7 @@ workflow:
 src/
 ├── cli/           # CLI モジュール (commander.js)
 │   ├── commands/  # init, start, status, stop, list, doctor
-│   └── config.ts  # .crew/config.yaml 読み書き
+│   └── config.ts  # ~/.crew/config.yaml 読み書き
 ├── workflow/      # Workflow Engine — 状態機械、YAML パース
 ├── runner/        # Agent Runner — tmux 管理、エージェント起動/停止
 ├── store/         # Task Store — CRUD、ステータス遷移、ファイル監視
