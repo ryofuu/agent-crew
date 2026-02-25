@@ -128,6 +128,53 @@ describe("AgentRunner", () => {
 			expect(result.ok).toBe(true);
 		});
 
+		test("spawns claude-code agent with auto-approve flag", async () => {
+			await runner.createSession("myproject");
+			const result = await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+				{ autoApprove: true },
+			);
+			expect(result.ok).toBe(true);
+
+			const sendCalls = mockTmux.calls.filter((c) => c.method === "sendText");
+			const command = sendCalls[0]?.args[1] as string;
+			expect(command).toContain("--dangerously-skip-permissions");
+		});
+
+		test("spawns codex agent with auto-approve flag", async () => {
+			await runner.createSession("myproject");
+			const result = await runner.spawn(
+				"implementer",
+				"implementer",
+				"codex",
+				"codex-1",
+				{ autoApprove: true },
+			);
+			expect(result.ok).toBe(true);
+
+			const sendCalls = mockTmux.calls.filter((c) => c.method === "sendText");
+			const command = sendCalls[0]?.args[1] as string;
+			expect(command).toContain("--full-auto");
+		});
+
+		test("spawns without auto-approve by default", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			const sendCalls = mockTmux.calls.filter((c) => c.method === "sendText");
+			const command = sendCalls[0]?.args[1] as string;
+			expect(command).not.toContain("--dangerously-skip-permissions");
+			expect(command).not.toContain("--full-auto");
+		});
+
 		test("returns error for duplicate agent name", async () => {
 			await runner.createSession("myproject");
 			await runner.spawn(

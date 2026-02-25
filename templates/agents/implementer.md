@@ -22,7 +22,13 @@
 
 ## 完了通知方法
 
-タスクの `status` を `dev_done` に更新する。Workflow Engine が自動検知する。
+全タスクの `status` を `dev_done` に更新したら、以下のファイルを作成して完了を通知する:
+
+```bash
+echo '{"result":"ok"}' > .crew/signals/implementer.done
+```
+
+Workflow Engine がこのファイルを検知して次のステージに進む。
 
 ## やらないこと
 

@@ -89,17 +89,47 @@ async function promptAgent(
 	workflowName: string,
 ): Promise<void> {
 	const roleTemplate = await loadRoleTemplate(role);
-	const prompt = buildPrompt(roleTemplate, goal, workflowName);
+	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName);
 	await runner.waitForReady(agentName, AGENT_READY_TIMEOUT_MS);
-	const result = await runner.sendInitialPrompt(agentName, prompt);
+	const result = await runner.sendInitialPrompt(agentName, builtPrompt);
 	if (!result.ok) {
 		console.error(`Error sending prompt to ${agentName}: ${result.error}`);
 	}
 }
 
+// --- Signal file helpers ---
+
+function signalPath(crewDir: string, role: string): string {
+	return path.join(crewDir, "signals", `${role}.done`);
+}
+
+async function checkSignal(crewDir: string, role: string): Promise<boolean> {
+	try {
+		await fs.promises.access(signalPath(crewDir, role));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function removeSignal(crewDir: string, role: string): Promise<void> {
+	try {
+		await fs.promises.unlink(signalPath(crewDir, role));
+	} catch {
+		// already removed or never existed
+	}
+}
+
+async function ensureSignalsDir(crewDir: string): Promise<void> {
+	await fs.promises.mkdir(path.join(crewDir, "signals"), { recursive: true });
+}
+
+// --- Poll loop ---
+
 interface PollContext {
 	engine: WorkflowEnginePort;
 	runner: AgentRunnerPort;
+	crewDir: string;
 	stages: StageDefinition[];
 	goal: string;
 	workflowName: string;
@@ -118,10 +148,16 @@ async function tryAdvanceStage(
 	const stageDef = ctx.stages[state.currentStageIndex];
 	if (currentStage?.status !== "active" || !stageDef) return "continue";
 
-	const status = await ctx.runner.getStatus(stageDef.role);
-	if (!status.ok || status.value !== "idle") return "continue";
+	// Check for signal file: .crew/signals/{role}.done
+	const done = await checkSignal(ctx.crewDir, stageDef.role);
+	if (!done) return "continue";
 
-	console.log(`Stage '${currentStage.name}' agent finished. Advancing...`);
+	// Signal detected — clean up and advance
+	await removeSignal(ctx.crewDir, stageDef.role);
+	console.log(
+		`Stage '${currentStage.name}' completed (signal received). Advancing...`,
+	);
+
 	const advResult = await ctx.engine.advance();
 	if (!advResult.ok) {
 		console.error(`Error advancing: ${advResult.error}`);
@@ -135,11 +171,7 @@ async function tryAdvanceStage(
 	const nextIdx = newState.value.currentStageIndex;
 	const nextStage = newState.value.stages[nextIdx];
 	const nextDef = ctx.stages[nextIdx];
-	if (
-		nextStage?.status === "active" &&
-		nextDef &&
-		nextIdx > ctx.promptedStageIndex
-	) {
+	if (nextStage?.status === "active" && nextDef) {
 		console.log(`Prompting '${nextDef.role}' for stage '${nextStage.name}'...`);
 		await promptAgent(
 			ctx.runner,
@@ -156,6 +188,7 @@ async function tryAdvanceStage(
 async function pollLoop(
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
+	crewDir: string,
 	stages: StageDefinition[],
 	goal: string,
 	workflowName: string,
@@ -165,6 +198,7 @@ async function pollLoop(
 	const ctx: PollContext = {
 		engine,
 		runner,
+		crewDir,
 		stages,
 		goal,
 		workflowName,
@@ -195,9 +229,14 @@ async function pollLoop(
 	}
 }
 
+interface StartOptions {
+	autoApprove?: boolean;
+}
+
 export async function startCommand(
 	workflowName: string,
 	goal: string,
+	options?: StartOptions,
 ): Promise<void> {
 	const cwd = process.cwd();
 	const crewDir = path.join(cwd, ".crew");
@@ -234,14 +273,23 @@ export async function startCommand(
 		process.exit(1);
 	}
 
+	// Ensure signals directory exists
+	await ensureSignalsDir(crewDir);
+
 	await runner.setupLayout(agents.length);
 
+	const autoApprove = options?.autoApprove || config.agent.auto_approve;
+	if (autoApprove) {
+		console.log("Auto-approve mode enabled.");
+	}
+	const spawnOptions = autoApprove ? { autoApprove: true } : undefined;
 	for (const agent of agents) {
 		const result = await runner.spawn(
 			agent.name,
 			agent.role,
 			agent.cliType,
 			agent.model,
+			spawnOptions,
 		);
 		if (!result.ok) {
 			console.error(`Error spawning ${agent.name}: ${result.error}`);
@@ -279,6 +327,7 @@ export async function startCommand(
 	await pollLoop(
 		engine,
 		runner,
+		crewDir,
 		stageDefs,
 		goal,
 		workflowName,

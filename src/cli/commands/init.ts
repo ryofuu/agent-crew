@@ -12,7 +12,7 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	}
 
 	// Create directory structure
-	const dirs = ["workflows", "tasks", "inbox", "logs"];
+	const dirs = ["workflows", "tasks", "inbox", "logs", "signals"];
 	for (const dir of dirs) {
 		await fs.promises.mkdir(path.join(crewDir, dir), { recursive: true });
 	}
@@ -34,7 +34,12 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 
 	// Update .gitignore
 	const gitignorePath = path.join(cwd, ".gitignore");
-	const gitignoreEntries = [".crew/state.json", ".crew/logs/", ".crew/inbox/"];
+	const gitignoreEntries = [
+		".crew/state.json",
+		".crew/logs/",
+		".crew/inbox/",
+		".crew/signals/",
+	];
 	let gitignoreContent = "";
 	try {
 		gitignoreContent = await fs.promises.readFile(gitignorePath, "utf-8");

@@ -7,7 +7,7 @@ stages:
     role: planner
     model: claude-opus-4-6
     human_gate: false
-    context_reset: false
+    context_reset: true
   - name: implement
     role: implementer
     model: codex-1

@@ -4,7 +4,7 @@ import type { AgentStatus, CliType, ModelId, Result } from "../kernel/index.js";
 import { AgentErrors, err, ok } from "../kernel/index.js";
 import { ClaudeCodeAdapter } from "./adapters/ClaudeCodeAdapter.js";
 import { CodexAdapter } from "./adapters/CodexAdapter.js";
-import type { CliAdapter } from "./adapters/types.js";
+import type { CliAdapter, StartCommandOptions } from "./adapters/types.js";
 import type { TmuxPort } from "./tmux.js";
 
 const AGENT_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -16,6 +16,7 @@ export interface AgentRunnerPort {
 		role: string,
 		cliType: CliType,
 		model: ModelId,
+		options?: StartCommandOptions,
 	): Promise<Result<void, string>>;
 	stop(agentName: string): Promise<Result<void, string>>;
 	stopAll(): Promise<Result<void, string>>;
@@ -43,6 +44,7 @@ interface AgentInfo {
 	pane: string;
 	adapter: CliAdapter;
 	model: ModelId;
+	options?: StartCommandOptions;
 }
 
 export class AgentRunner implements AgentRunnerPort {
@@ -115,6 +117,7 @@ export class AgentRunner implements AgentRunnerPort {
 		role: string,
 		cliType: CliType,
 		model: ModelId,
+		options?: StartCommandOptions,
 	): Promise<Result<void, string>> {
 		const nameCheck = this.validateAgentName(agentName);
 		if (!nameCheck.ok) return nameCheck;
@@ -128,12 +131,19 @@ export class AgentRunner implements AgentRunnerPort {
 		const adapter: CliAdapter =
 			cliType === "claude-code" ? new ClaudeCodeAdapter() : new CodexAdapter();
 		const pane = `${this.sessionName}:0.${this.paneIndex}`;
-		const command = adapter.startCommand(model, this.cwd);
+		const command = adapter.startCommand(model, this.cwd, options);
 
 		const result = await this.tmux.sendText(pane, command);
 		if (!result.ok) return result;
 
-		this.agents.set(agentName, { name: agentName, role, pane, adapter, model });
+		this.agents.set(agentName, {
+			name: agentName,
+			role,
+			pane,
+			adapter,
+			model,
+			options,
+		});
 		this.paneIndex++;
 		return ok(undefined);
 	}
@@ -218,7 +228,11 @@ export class AgentRunner implements AgentRunnerPort {
 		await Bun.sleep(CONTEXT_RESET_DELAY_MS);
 
 		// Restart the agent
-		const command = agent.adapter.startCommand(agent.model, this.cwd);
+		const command = agent.adapter.startCommand(
+			agent.model,
+			this.cwd,
+			agent.options,
+		);
 		return this.tmux.sendText(agent.pane, command);
 	}
 

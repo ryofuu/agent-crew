@@ -1,7 +1,15 @@
 import type { AgentStatus, ModelId } from "../../kernel/index.js";
 
+export interface StartCommandOptions {
+	autoApprove?: boolean;
+}
+
 export interface CliAdapter {
-	readonly startCommand: (model: ModelId, cwd: string) => string;
+	readonly startCommand: (
+		model: ModelId,
+		cwd: string,
+		options?: StartCommandOptions,
+	) => string;
 	readonly clearCommand: string;
 	detectStatus(paneOutput: string): AgentStatus;
 }
