@@ -20,7 +20,8 @@ export type ModelId =
 	| "claude-opus-4-6"
 	| "claude-sonnet-4-6"
 	| "codex-1"
-	| "codex-mini-latest";
+	| "codex-mini-latest"
+	| "gpt-5.3-codex";
 
 export type CliType = "claude-code" | "codex";
 

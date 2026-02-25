@@ -8,17 +8,17 @@ max_cycles: 10
 stages:
   - name: plan
     role: planner
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: true
     context_reset: false
   - name: implement
     role: implementer
-    model: codex-1
+    provider: codex
     human_gate: false
     context_reset: true
   - name: review
     role: reviewer
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: true
     context_reset: true
     on_complete: [loop, close]
@@ -31,15 +31,15 @@ max_cycles: 1
 stages:
   - name: plan
     role: planner
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
   - name: implement
     role: implementer
-    model: codex-1
+    provider: codex
     human_gate: false
   - name: review
     role: reviewer
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
 `;
 

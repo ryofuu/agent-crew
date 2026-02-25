@@ -23,7 +23,7 @@ describe("Config", () => {
 		const config = defaultConfig("test-project");
 		expect(config.project_name).toBe("test-project");
 		expect(config.defaults.planner_model).toBe("claude-opus-4-6");
-		expect(config.defaults.implementer_model).toBe("codex-1");
+		expect(config.defaults.implementer_model).toBe("gpt-5.3-codex");
 		expect(config.workflow.poll_interval_seconds).toBe(5);
 	});
 

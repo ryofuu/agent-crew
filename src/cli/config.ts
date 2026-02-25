@@ -10,6 +10,7 @@ const ModelIdSchema = z.enum([
 	"claude-sonnet-4-6",
 	"codex-1",
 	"codex-mini-latest",
+	"gpt-5.3-codex",
 ]);
 
 const ConfigSchema = z.object({
@@ -17,7 +18,7 @@ const ConfigSchema = z.object({
 	defaults: z
 		.object({
 			planner_model: ModelIdSchema.default("claude-opus-4-6"),
-			implementer_model: ModelIdSchema.default("codex-1"),
+			implementer_model: ModelIdSchema.default("gpt-5.3-codex"),
 			reviewer_model: ModelIdSchema.default("claude-opus-4-6"),
 		})
 		.default({}),

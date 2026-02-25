@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { AgentStatus, CliType, ModelId, Result } from "../kernel/index.js";
+import type { AgentStatus, CliType, Result } from "../kernel/index.js";
 import { AgentErrors, err, ok } from "../kernel/index.js";
 import { ClaudeCodeAdapter } from "./adapters/ClaudeCodeAdapter.js";
 import { CodexAdapter } from "./adapters/CodexAdapter.js";
@@ -15,7 +15,7 @@ export interface AgentRunnerPort {
 		agentName: string,
 		role: string,
 		cliType: CliType,
-		model: ModelId,
+		model: string | undefined,
 		options?: StartCommandOptions,
 	): Promise<Result<void, string>>;
 	stop(agentName: string): Promise<Result<void, string>>;
@@ -43,7 +43,7 @@ interface AgentInfo {
 	role: string;
 	pane: string;
 	adapter: CliAdapter;
-	model: ModelId;
+	model: string | undefined;
 	options?: StartCommandOptions;
 }
 
@@ -116,7 +116,7 @@ export class AgentRunner implements AgentRunnerPort {
 		agentName: string,
 		role: string,
 		cliType: CliType,
-		model: ModelId,
+		model: string | undefined,
 		options?: StartCommandOptions,
 	): Promise<Result<void, string>> {
 		const nameCheck = this.validateAgentName(agentName);

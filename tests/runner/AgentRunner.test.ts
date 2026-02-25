@@ -123,7 +123,7 @@ describe("AgentRunner", () => {
 				"implementer",
 				"implementer",
 				"codex",
-				"codex-1",
+				"gpt-5.3-codex",
 			);
 			expect(result.ok).toBe(true);
 		});
@@ -150,7 +150,7 @@ describe("AgentRunner", () => {
 				"implementer",
 				"implementer",
 				"codex",
-				"codex-1",
+				"gpt-5.3-codex",
 				{ autoApprove: true },
 			);
 			expect(result.ok).toBe(true);

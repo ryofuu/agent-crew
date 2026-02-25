@@ -1,4 +1,4 @@
-import type { AgentStatus, ModelId } from "../../kernel/index.js";
+import type { AgentStatus } from "../../kernel/index.js";
 
 export interface StartCommandOptions {
 	autoApprove?: boolean;
@@ -6,7 +6,7 @@ export interface StartCommandOptions {
 
 export interface CliAdapter {
 	readonly startCommand: (
-		model: ModelId,
+		model: string | undefined,
 		cwd: string,
 		options?: StartCommandOptions,
 	) => string;

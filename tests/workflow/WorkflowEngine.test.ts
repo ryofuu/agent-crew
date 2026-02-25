@@ -23,15 +23,15 @@ max_cycles: 3
 stages:
   - name: plan
     role: planner
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
   - name: implement
     role: implementer
-    model: codex-1
+    provider: codex
     human_gate: false
   - name: review
     role: reviewer
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
 `,
 	);
@@ -46,11 +46,11 @@ max_cycles: 2
 stages:
   - name: plan
     role: planner
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: true
   - name: implement
     role: implementer
-    model: codex-1
+    provider: codex
     human_gate: false
 `,
 	);

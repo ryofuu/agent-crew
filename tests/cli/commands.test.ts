@@ -86,7 +86,7 @@ describe("config validation", () => {
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.value.defaults.planner_model).toBe("claude-opus-4-6");
-			expect(result.value.defaults.implementer_model).toBe("codex-1");
+			expect(result.value.defaults.implementer_model).toBe("gpt-5.3-codex");
 			expect(result.value.defaults.reviewer_model).toBe("claude-opus-4-6");
 		}
 	});

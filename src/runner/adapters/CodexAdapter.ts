@@ -1,4 +1,4 @@
-import type { AgentStatus, ModelId } from "../../kernel/index.js";
+import type { AgentStatus } from "../../kernel/index.js";
 import {
 	type CliAdapter,
 	detectAgentStatus,
@@ -10,12 +10,13 @@ export class CodexAdapter implements CliAdapter {
 	readonly clearCommand = "\x1b"; // Escape only
 
 	startCommand(
-		model: ModelId,
+		model: string | undefined,
 		cwd: string,
 		options?: StartCommandOptions,
 	): string {
+		const modelFlag = model ? ` --model ${shellEscape(model)}` : "";
 		const flags = options?.autoApprove ? " --full-auto" : "";
-		return `cd ${shellEscape(cwd)} && codex --model ${shellEscape(model)}${flags}`;
+		return `cd ${shellEscape(cwd)} && codex${modelFlag}${flags}`;
 	}
 
 	detectStatus(paneOutput: string): AgentStatus {

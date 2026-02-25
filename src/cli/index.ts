@@ -25,6 +25,7 @@ export function createCLI(): Command {
 		.description("Start a workflow")
 		.argument("<workflow>", "Workflow name (e.g., dev-cycle)")
 		.argument("<goal>", "Goal description")
+		.option("--auto-approve", "Run all agents in auto-approve mode")
 		.action(startCommand);
 
 	program

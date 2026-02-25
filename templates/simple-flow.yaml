@@ -5,16 +5,16 @@ max_cycles: 1
 stages:
   - name: plan
     role: planner
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
     context_reset: true
   - name: implement
     role: implementer
-    model: codex-1
+    provider: codex
     human_gate: false
     context_reset: true
   - name: review
     role: reviewer
-    model: claude-opus-4-6
+    provider: claude-code
     human_gate: false
     context_reset: true

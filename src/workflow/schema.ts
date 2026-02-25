@@ -3,7 +3,8 @@ import { z } from "zod";
 export const StageDefinitionSchema = z.object({
 	name: z.string(),
 	role: z.string(),
-	model: z.string(),
+	provider: z.enum(["claude-code", "codex"]),
+	model: z.string().optional(),
 	human_gate: z.boolean().default(false),
 	context_reset: z.boolean().default(false),
 	on_complete: z.array(z.string()).optional(),

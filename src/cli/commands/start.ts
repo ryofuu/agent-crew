@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CliType, ModelId } from "../../kernel/index.js";
+import type { CliType } from "../../kernel/index.js";
 import type { AgentRunnerPort } from "../../runner/index.js";
 import { AgentRunner, Tmux } from "../../runner/index.js";
 import type {
@@ -16,17 +16,15 @@ interface AgentEntry {
 	name: string;
 	role: string;
 	cliType: CliType;
-	model: ModelId;
+	model: string | undefined;
 }
 
 function buildAgentList(stages: StageDefinition[]): AgentEntry[] {
 	return stages.map((stage) => ({
 		name: stage.role,
 		role: stage.role,
-		cliType: (stage.model.startsWith("codex")
-			? "codex"
-			: "claude-code") as CliType,
-		model: stage.model as ModelId,
+		cliType: stage.provider as CliType,
+		model: stage.model,
 	}));
 }
 

@@ -60,7 +60,9 @@ describe("integration: crew init", () => {
 		if (configResult.ok) {
 			expect(configResult.value.project_name).toBe(path.basename(tmpDir));
 			expect(configResult.value.defaults.planner_model).toBe("claude-opus-4-6");
-			expect(configResult.value.defaults.implementer_model).toBe("codex-1");
+			expect(configResult.value.defaults.implementer_model).toBe(
+				"gpt-5.3-codex",
+			);
 			expect(configResult.value.defaults.reviewer_model).toBe(
 				"claude-opus-4-6",
 			);
