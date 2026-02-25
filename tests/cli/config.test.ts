@@ -20,21 +20,19 @@ afterEach(async () => {
 
 describe("Config", () => {
 	test("defaultConfig returns valid config", () => {
-		const config = defaultConfig("test-project");
-		expect(config.project_name).toBe("test-project");
+		const config = defaultConfig();
 		expect(config.defaults.planner_model).toBe("claude-opus-4-6");
 		expect(config.defaults.implementer_model).toBe("gpt-5.3-codex");
 		expect(config.workflow.poll_interval_seconds).toBe(5);
 	});
 
 	test("writeConfig and readConfig round-trip", async () => {
-		const config = defaultConfig("roundtrip-project");
-		await writeConfig(tmpDir, config);
+		const config = defaultConfig();
+		await writeConfig(config, tmpDir);
 
 		const result = await readConfig(tmpDir);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.project_name).toBe("roundtrip-project");
 			expect(result.value.defaults.planner_model).toBe("claude-opus-4-6");
 		}
 	});

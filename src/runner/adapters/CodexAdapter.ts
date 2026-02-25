@@ -7,7 +7,7 @@ import {
 } from "./types.js";
 
 export class CodexAdapter implements CliAdapter {
-	readonly clearCommand = "\x1b"; // Escape only
+	readonly clearCommand = "/new";
 
 	startCommand(
 		model: string | undefined,

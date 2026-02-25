@@ -142,6 +142,10 @@ interface PollContext {
 	goal: string;
 	workflowName: string;
 	promptedStageIndex: number;
+	nudgeIntervalMs: number;
+	maxNudges: number;
+	lastActiveAt: number;
+	nudgeCount: number;
 }
 
 /** Returns "break" to exit loop, "continue" to keep polling. */
@@ -220,6 +224,42 @@ async function promptIfNeeded(ctx: PollContext): Promise<void> {
 	}
 }
 
+const NUDGE_MESSAGE =
+	"タスクを続行してください。止まっている場合はシグナルファイルを作成してください。";
+
+async function maybeNudgeAgent(ctx: PollContext): Promise<void> {
+	const stateResult = await ctx.engine.getState();
+	if (!stateResult.ok || stateResult.value.status !== "running") return;
+
+	const idx = stateResult.value.currentStageIndex;
+	const currentStage = stateResult.value.stages[idx];
+	const stageDef = ctx.stages[idx];
+	if (currentStage?.status !== "active" || !stageDef) return;
+
+	const statusResult = await ctx.runner.getStatus(stageDef.role);
+	if (!statusResult.ok) return;
+
+	const now = Date.now();
+	if (statusResult.value === "active") {
+		ctx.lastActiveAt = now;
+		ctx.nudgeCount = 0;
+		return;
+	}
+
+	if (
+		statusResult.value === "idle" &&
+		now - ctx.lastActiveAt > ctx.nudgeIntervalMs &&
+		ctx.nudgeCount < ctx.maxNudges
+	) {
+		ctx.nudgeCount++;
+		console.log(
+			`Nudging '${stageDef.role}' (attempt ${ctx.nudgeCount}/${ctx.maxNudges})...`,
+		);
+		await ctx.runner.sendNudge(stageDef.role, NUDGE_MESSAGE);
+		ctx.lastActiveAt = now;
+	}
+}
+
 async function pollLoop(
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
@@ -229,6 +269,8 @@ async function pollLoop(
 	workflowName: string,
 	promptedStageIndex: number,
 	pollInterval: number,
+	nudgeIntervalMs: number,
+	maxNudges: number,
 	signal: AbortSignal,
 ): Promise<void> {
 	const ctx: PollContext = {
@@ -239,6 +281,10 @@ async function pollLoop(
 		goal,
 		workflowName,
 		promptedStageIndex,
+		nudgeIntervalMs,
+		maxNudges,
+		lastActiveAt: Date.now(),
+		nudgeCount: 0,
 	};
 
 	while (!signal.aborted) {
@@ -264,6 +310,8 @@ async function pollLoop(
 		const action = await tryAdvanceStage(ctx);
 		if (action === "break") break;
 
+		await maybeNudgeAgent(ctx);
+
 		await Bun.sleep(pollInterval);
 	}
 }
@@ -280,13 +328,14 @@ export async function startCommand(
 	const cwd = process.cwd();
 	const crewDir = path.join(cwd, ".crew");
 
-	const configResult = await readConfig(crewDir);
+	const configResult = await readConfig();
 	if (!configResult.ok) {
 		console.error(`Error: ${configResult.error}`);
 		console.error("Run 'crew init' first.");
 		process.exit(1);
 	}
 	const config = configResult.value;
+	const projectName = path.basename(cwd);
 
 	const engine = new WorkflowEngine(crewDir);
 	const tmux = new Tmux();
@@ -306,7 +355,7 @@ export async function startCommand(
 	const stageDefs = stageDefsResult.value;
 	const agents = buildAgentList(stageDefs);
 
-	const sessionResult = await runner.createSession(config.project_name);
+	const sessionResult = await runner.createSession(projectName);
 	if (!sessionResult.ok) {
 		console.error(`Error: ${sessionResult.error}`);
 		process.exit(1);
@@ -336,7 +385,7 @@ export async function startCommand(
 	}
 
 	console.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
-	console.log(`tmux session: crew-${config.project_name}`);
+	console.log(`tmux session: crew-${projectName}`);
 
 	// Send initial prompt to the first active stage's agent
 	let promptedStageIndex = -1;
@@ -372,6 +421,8 @@ export async function startCommand(
 	process.on("SIGTERM", cleanup);
 
 	const pollInterval = config.workflow.poll_interval_seconds * 1000;
+	const nudgeIntervalMs = config.agent.nudge_interval_seconds * 1000;
+	const maxNudges = config.agent.max_escalation_phase;
 	await pollLoop(
 		engine,
 		runner,
@@ -381,6 +432,8 @@ export async function startCommand(
 		workflowName,
 		promptedStageIndex,
 		pollInterval,
+		nudgeIntervalMs,
+		maxNudges,
 		abortController.signal,
 	);
 

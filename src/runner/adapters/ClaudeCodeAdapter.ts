@@ -7,7 +7,7 @@ import {
 } from "./types.js";
 
 export class ClaudeCodeAdapter implements CliAdapter {
-	readonly clearCommand = "\x1b\x03"; // Escape + C-c
+	readonly clearCommand = "/clear";
 
 	startCommand(
 		model: string | undefined,

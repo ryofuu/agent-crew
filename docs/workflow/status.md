@@ -33,6 +33,8 @@
 | TICKET-011 | シグナルファイルによるステージ完了検知 | implementer-1 | changes_requested | critical | R1: 2 Required Changes |
 | TICKET-012 | auto_approve モード | implementer-1 | changes_requested | high | R1: 2 Required Changes |
 | TICKET-013 | ゲート承認後プロンプト未送信バグ | implementer-1 | closed | critical | N/A (手動修正) |
+| TICKET-015 | context_reset で /clear 送信に変更 | implementer-1 | closed | high | N/A (手動修正) |
+| TICKET-016 | idle 検知 & 自動ナッジ + .crew/ 整理 | implementer-1 | closed | high | N/A (手動修正) |
 
 ## Dependency Graph
 

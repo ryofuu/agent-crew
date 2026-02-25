@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentStatus, CliType, Result } from "../kernel/index.js";
 import { AgentErrors, err, ok } from "../kernel/index.js";
@@ -8,8 +9,6 @@ import type { CliAdapter, StartCommandOptions } from "./adapters/types.js";
 import type { TmuxPort } from "./tmux.js";
 
 const AGENT_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const CONTEXT_RESET_DELAY_MS = 500;
-
 export interface AgentRunnerPort {
 	spawn(
 		agentName: string,
@@ -193,7 +192,7 @@ export class AgentRunner implements AgentRunnerPort {
 		const agent = this.agents.get(agentName);
 		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
 
-		const promptDir = path.join(this.crewDir, "prompts");
+		const promptDir = path.join(os.tmpdir(), "agent-crew-prompts");
 		await fs.promises.mkdir(promptDir, { recursive: true });
 		const promptPath = path.join(promptDir, `${agentName}.md`);
 		const tmpPath = `${promptPath}.tmp`;
@@ -218,22 +217,8 @@ export class AgentRunner implements AgentRunnerPort {
 		const agent = this.agents.get(agentName);
 		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
 
-		// Send clear command (Escape + C-c for Claude, Escape for Codex)
-		const clearResult = await this.tmux.sendKeys(
-			agent.pane,
-			agent.adapter.clearCommand,
-		);
-		if (!clearResult.ok) return clearResult;
-
-		await Bun.sleep(CONTEXT_RESET_DELAY_MS);
-
-		// Restart the agent
-		const command = agent.adapter.startCommand(
-			agent.model,
-			this.cwd,
-			agent.options,
-		);
-		return this.tmux.sendText(agent.pane, command);
+		// Send /clear command to reset context without restarting
+		return await this.tmux.sendText(agent.pane, agent.adapter.clearCommand);
 	}
 
 	async getStatus(agentName: string): Promise<Result<AgentStatus, string>> {

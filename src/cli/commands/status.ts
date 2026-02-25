@@ -3,19 +3,11 @@ import { Tmux } from "../../runner/index.js";
 import { TaskStore } from "../../store/index.js";
 import type { WorkflowState } from "../../workflow/index.js";
 import { readState } from "../../workflow/index.js";
-import { readConfig } from "../config.js";
 
-async function printAgentStatus(
-	crewDir: string,
-	state: WorkflowState,
-): Promise<void> {
-	const configResult = await readConfig(crewDir);
-	if (!configResult.ok) {
-		console.log("Agents: (config not found)");
-		return;
-	}
-	const config = configResult.value;
-	const sessionName = `crew-${config.project_name}`;
+async function printAgentStatus(state: WorkflowState): Promise<void> {
+	const cwd = process.cwd();
+	const projectName = path.basename(cwd);
+	const sessionName = `crew-${projectName}`;
 	const tmux = new Tmux();
 	const hasSession = await tmux.hasSession(sessionName);
 
@@ -84,5 +76,5 @@ export async function statusCommand(): Promise<void> {
 
 	// Agents
 	console.log();
-	await printAgentStatus(crewDir, state);
+	await printAgentStatus(state);
 }

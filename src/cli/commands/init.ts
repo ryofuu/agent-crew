@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { defaultConfig, writeConfig } from "../config.js";
+import { defaultConfig, readConfig, writeConfig } from "../config.js";
 
 export async function initCommand(options: { force?: boolean }): Promise<void> {
 	const cwd = process.cwd();
@@ -12,7 +12,7 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	}
 
 	// Create directory structure
-	const dirs = ["workflows", "tasks", "inbox", "logs", "signals"];
+	const dirs = ["tasks", "inbox", "logs", "signals"];
 	for (const dir of dirs) {
 		await fs.promises.mkdir(path.join(crewDir, dir), { recursive: true });
 	}
@@ -27,10 +27,12 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	// Create initial state.json
 	await fs.promises.writeFile(path.join(crewDir, "state.json"), "{}", "utf-8");
 
-	// Create config.yaml
-	const projectName = path.basename(cwd);
-	const config = defaultConfig(projectName);
-	await writeConfig(crewDir, config);
+	// Create global config if it doesn't exist
+	const existingConfig = await readConfig();
+	if (!existingConfig.ok) {
+		const config = defaultConfig();
+		await writeConfig(config);
+	}
 
 	// Update .gitignore
 	const gitignorePath = path.join(cwd, ".gitignore");
@@ -54,6 +56,7 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 		await fs.promises.writeFile(gitignorePath, newContent, "utf-8");
 	}
 
+	const projectName = path.basename(cwd);
 	console.log("Initialized .crew/ directory");
 	console.log(`  Project: ${projectName}`);
 	console.log("  Run 'crew start <workflow> \"<goal>\"' to begin");

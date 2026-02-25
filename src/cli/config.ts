@@ -14,7 +14,6 @@ const ModelIdSchema = z.enum([
 ]);
 
 const ConfigSchema = z.object({
-	project_name: z.string(),
 	defaults: z
 		.object({
 			planner_model: ModelIdSchema.default("claude-opus-4-6"),
@@ -43,10 +42,14 @@ const ConfigSchema = z.object({
 
 export type Config = z.infer<typeof ConfigSchema>;
 
+export function crewHome(): string {
+	return process.env.CREW_HOME ?? path.join(process.env.HOME ?? "", ".crew");
+}
+
 export async function readConfig(
-	crewDir: string,
+	dir?: string,
 ): Promise<Result<Config, string>> {
-	const configPath = path.join(crewDir, "config.yaml");
+	const configPath = path.join(dir ?? crewHome(), "config.yaml");
 	try {
 		const raw = await fs.promises.readFile(configPath, "utf-8");
 		const parsed = yaml.load(raw, { schema: yaml.JSON_SCHEMA });
@@ -61,10 +64,12 @@ export async function readConfig(
 }
 
 export async function writeConfig(
-	crewDir: string,
 	config: Config,
+	dir?: string,
 ): Promise<Result<void, string>> {
-	const configPath = path.join(crewDir, "config.yaml");
+	const targetDir = dir ?? crewHome();
+	await fs.promises.mkdir(targetDir, { recursive: true });
+	const configPath = path.join(targetDir, "config.yaml");
 	const tmpPath = `${configPath}.tmp`;
 	try {
 		const content = yaml.dump(config, { lineWidth: 120 });
@@ -76,6 +81,6 @@ export async function writeConfig(
 	}
 }
 
-export function defaultConfig(projectName: string): Config {
-	return ConfigSchema.parse({ project_name: projectName });
+export function defaultConfig(): Config {
+	return ConfigSchema.parse({});
 }

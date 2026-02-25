@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { initCommand } from "../../src/cli/commands/init.js";
-import { readConfig } from "../../src/cli/config.js";
+import { crewHome, readConfig } from "../../src/cli/config.js";
 
 let tmpDir: string;
 let originalCwd: string;
@@ -28,7 +28,6 @@ describe("integration: crew init", () => {
 
 		expect(fs.existsSync(crewDir)).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "tasks"))).toBe(true);
-		expect(fs.existsSync(path.join(crewDir, "workflows"))).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "inbox"))).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "logs"))).toBe(true);
 	});
@@ -51,14 +50,12 @@ describe("integration: crew init", () => {
 		expect(content).toBe("{}");
 	});
 
-	test("creates valid config.yaml with project name from directory", async () => {
+	test("creates valid config.yaml at crewHome", async () => {
 		await initCommand({ force: false });
-		const crewDir = path.join(tmpDir, ".crew");
 
-		const configResult = await readConfig(crewDir);
+		const configResult = await readConfig(crewHome());
 		expect(configResult.ok).toBe(true);
 		if (configResult.ok) {
-			expect(configResult.value.project_name).toBe(path.basename(tmpDir));
 			expect(configResult.value.defaults.planner_model).toBe("claude-opus-4-6");
 			expect(configResult.value.defaults.implementer_model).toBe(
 				"gpt-5.3-codex",
@@ -108,7 +105,8 @@ describe("integration: crew init", () => {
 		await initCommand({ force: true });
 
 		// .crew should still exist and be valid
-		const configResult = await readConfig(path.join(tmpDir, ".crew"));
+		expect(fs.existsSync(path.join(tmpDir, ".crew"))).toBe(true);
+		const configResult = await readConfig(crewHome());
 		expect(configResult.ok).toBe(true);
 	});
 });

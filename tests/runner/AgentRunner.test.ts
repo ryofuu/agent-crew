@@ -305,16 +305,18 @@ describe("AgentRunner", () => {
 			const result = await runner.sendInitialPrompt("planner", "Do the thing");
 			expect(result.ok).toBe(true);
 
-			// Verify prompt file was written
-			const promptPath = path.join(tmpDir, "prompts", "planner.md");
-			const content = await fs.promises.readFile(promptPath, "utf-8");
-			expect(content).toBe("Do the thing");
-
-			// Verify sendPromptFile was called
+			// Verify sendPromptFile was called with a file in tmpdir
 			const promptCalls = mockTmux.calls.filter(
 				(c) => c.method === "sendPromptFile",
 			);
 			expect(promptCalls.length).toBe(1);
+			const filePath = promptCalls[0]?.args[1] as string;
+			expect(filePath).toContain("agent-crew-prompts");
+			expect(filePath).toEndWith("planner.md");
+
+			// Verify prompt file content
+			const content = await fs.promises.readFile(filePath, "utf-8");
+			expect(content).toBe("Do the thing");
 		});
 
 		test("returns error for nonexistent agent", async () => {

@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { initCommand } from "../../src/cli/commands/init.js";
 import {
+	crewHome,
 	defaultConfig,
 	readConfig,
 	writeConfig,
@@ -30,7 +31,6 @@ describe("init command", () => {
 
 		expect(fs.existsSync(crewDir)).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "tasks"))).toBe(true);
-		expect(fs.existsSync(path.join(crewDir, "workflows"))).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "inbox"))).toBe(true);
 		expect(fs.existsSync(path.join(crewDir, "logs"))).toBe(true);
 
@@ -41,8 +41,8 @@ describe("init command", () => {
 		);
 		expect(counter).toBe("0");
 
-		// Check config.yaml
-		const configResult = await readConfig(crewDir);
+		// Check config.yaml at crewHome
+		const configResult = await readConfig(crewHome());
 		expect(configResult.ok).toBe(true);
 	});
 
@@ -64,7 +64,7 @@ describe("config validation", () => {
 		const configPath = path.join(crewDir, "config.yaml");
 		await fs.promises.writeFile(
 			configPath,
-			`project_name: test\ndefaults:\n  planner_model: invalid-model\n`,
+			`defaults:\n  planner_model: invalid-model\n`,
 			"utf-8",
 		);
 
@@ -79,8 +79,8 @@ describe("config validation", () => {
 		const crewDir = path.join(tmpDir, ".crew");
 		await fs.promises.mkdir(crewDir, { recursive: true });
 
-		const config = defaultConfig("valid-test");
-		await writeConfig(crewDir, config);
+		const config = defaultConfig();
+		await writeConfig(config, crewDir);
 
 		const result = await readConfig(crewDir);
 		expect(result.ok).toBe(true);
