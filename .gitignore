@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.crew/state.json
+.crew/logs/
+.crew/inbox/
+*.tmp
