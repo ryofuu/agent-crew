@@ -85,7 +85,17 @@ async function promptAgent(
 	role: string,
 	goal: string,
 	workflowName: string,
+	contextReset: boolean,
 ): Promise<void> {
+	if (contextReset) {
+		console.log(`Resetting context for '${agentName}'...`);
+		const resetResult = await runner.resetContext(agentName);
+		if (!resetResult.ok) {
+			console.error(
+				`Error resetting context for ${agentName}: ${resetResult.error}`,
+			);
+		}
+	}
 	const roleTemplate = await loadRoleTemplate(role);
 	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName);
 	await runner.waitForReady(agentName, AGENT_READY_TIMEOUT_MS);
@@ -181,6 +191,7 @@ async function tryAdvanceStage(
 			nextDef.role,
 			ctx.goal,
 			ctx.workflowName,
+			nextDef.context_reset,
 		);
 		ctx.promptedStageIndex = nextIdx;
 	}
@@ -203,6 +214,7 @@ async function promptIfNeeded(ctx: PollContext): Promise<void> {
 			def.role,
 			ctx.goal,
 			ctx.workflowName,
+			def.context_reset,
 		);
 		ctx.promptedStageIndex = idx;
 	}
@@ -335,7 +347,14 @@ export async function startCommand(
 		const def = stageDefs[idx];
 		if (stage?.status === "active" && def) {
 			console.log(`Sending initial prompt to '${def.role}'...`);
-			await promptAgent(runner, def.role, def.role, goal, workflowName);
+			await promptAgent(
+				runner,
+				def.role,
+				def.role,
+				goal,
+				workflowName,
+				def.context_reset,
+			);
 			promptedStageIndex = idx;
 		}
 	}

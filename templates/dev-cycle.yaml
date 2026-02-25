@@ -6,8 +6,8 @@ stages:
   - name: plan
     role: planner
     provider: claude-code
-    human_gate: true
-    context_reset: false
+    human_gate: false
+    context_reset: true
   - name: implement
     role: implementer
     provider: codex
@@ -16,6 +16,6 @@ stages:
   - name: review
     role: reviewer
     provider: claude-code
-    human_gate: true
+    human_gate: false
     context_reset: true
     on_complete: [loop, close]
