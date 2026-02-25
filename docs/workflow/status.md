@@ -1,20 +1,20 @@
 # Workflow Status Board
 
-**Current Phase**: Review R3 完了 → TICKET-008 (統合テスト) 待ち
-**Updated**: 2026-02-25T17:00:00+09:00
+**Current Phase**: Review R1 — TICKET-008 (統合テスト) APPROVED
+**Updated**: 2026-02-25T19:30:00+09:00
 **Goal**: agent-crew Phase 1 MVP 実装（dev-cycle ワークフロー最小動作版）
 
 ## Ticket Summary
 
 | Status | Count |
 |--------|-------|
-| todo | 1 |
+| todo | 0 |
 | in_progress | 0 |
 | blocked | 0 |
 | dev_done | 0 |
 | changes_requested | 0 |
 | in_review | 0 |
-| closed | 7 |
+| closed | 8 |
 
 ## Active Work
 
@@ -27,7 +27,7 @@
 | TICKET-005 | Agent Runner Module | implementer-1 | closed | high | APPROVED (R2) |
 | TICKET-006 | CLI Module (crew コマンド全体) | implementer-1 | closed | high | APPROVED (R3) |
 | TICKET-007 | dev-cycle テンプレート + AGENTS.md | implementer-1 | closed | medium | APPROVED (R1) |
-| TICKET-008 | 統合テスト (E2E) | - | todo | medium | - |
+| TICKET-008 | 統合テスト (E2E) | implementer-1 | closed | medium | APPROVED (R1) |
 
 ## Dependency Graph
 
@@ -39,7 +39,7 @@ TICKET-001 (プロジェクト初期化) ✅
        └─ TICKET-005 (Agent Runner) ✅ APPROVED (R2)
             ├─ TICKET-006 (CLI) ✅ APPROVED (R3)
             └─ TICKET-007 (Templates/AGENTS) ✅
-                 └─ TICKET-008 (統合テスト) ⏳ todo
+                 └─ TICKET-008 (統合テスト) ✅ APPROVED (R1)
 ```
 
 ## Quality Gate (R3)
@@ -78,3 +78,5 @@ TICKET-001 (プロジェクト初期化) ✅
 | Review R2 | 2026-02-25 | 2026-02-25 | 1 APPROVED (005), 3 CHANGES_REQUESTED (003,004,006) |
 | Implement R3 | 2026-02-25 | 2026-02-25 | TICKET-003,004,006 修正完了、全チケット dev_done |
 | Review R3 | 2026-02-25 | 2026-02-25 | 3 APPROVED (003,004,006)。全実装チケット closed |
+| Implement (008) | 2026-02-25 | 2026-02-25 | TICKET-008 統合テスト実装完了 |
+| Review (008) | 2026-02-25 | 2026-02-25 | TICKET-008 APPROVED (R1)。全8チケット closed |
