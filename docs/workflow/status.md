@@ -14,7 +14,7 @@
 | dev_done | 0 |
 | changes_requested | 3 |
 | in_review | 0 |
-| closed | 9 |
+| closed | 10 |
 
 ## Active Work
 
@@ -32,6 +32,7 @@
 | TICKET-010 | プロンプト送信+ステージ自動遷移 | implementer-1 | changes_requested | critical | R1: 4 Required Changes |
 | TICKET-011 | シグナルファイルによるステージ完了検知 | implementer-1 | changes_requested | critical | R1: 2 Required Changes |
 | TICKET-012 | auto_approve モード | implementer-1 | changes_requested | high | R1: 2 Required Changes |
+| TICKET-013 | ゲート承認後プロンプト未送信バグ | implementer-1 | closed | critical | N/A (手動修正) |
 
 ## Dependency Graph
 
@@ -47,7 +48,8 @@ TICKET-001 (プロジェクト初期化) ✅
                       ├─ TICKET-009 (simple-flow) ✅ APPROVED (R1)
                       └─ TICKET-010 (プロンプト送信) ⚠️ CHANGES_REQUESTED (R1)
                            ├─ TICKET-011 (シグナルファイル) ⚠️ CHANGES_REQUESTED (R1)
-                           └─ TICKET-012 (auto_approve) ⚠️ CHANGES_REQUESTED (R1)
+                           ├─ TICKET-012 (auto_approve) ⚠️ CHANGES_REQUESTED (R1)
+                           └─ TICKET-013 (ゲート後プロンプト) ✅ closed
 ```
 
 ## Quality Gate (TICKET-011/012 Review)
