@@ -30,8 +30,8 @@ export function detectAgentStatus(paneOutput: string): AgentStatus {
 	const lines = paneOutput.trim().split("\n");
 	const lastLines = lines.slice(-5).join("\n");
 
-	// Check for shell prompt (idle) — line ending with prompt char ($, %, #, >)
-	if (/[$%#>]\s*$/m.test(lastLines)) return "idle";
+	// Check for shell prompt (idle) — line ending with prompt char ($, %, #, >, ❯)
+	if (/[$%#>❯]\s*$/m.test(lastLines)) return "idle";
 
 	// Check for errors — avoid false positives on "No errors found" etc.
 	if (/\b(?:Error|ENOENT|EACCES|fatal|panic)\b/.test(lastLines)) return "error";

@@ -248,6 +248,22 @@ describe("AgentRunner", () => {
 			if (result.ok) expect(result.value).toBe("idle");
 		});
 
+		test("detects idle status from Claude Code prompt (❯)", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+			mockTmux.captureOutput =
+				"  ⎿  Interrupted · What should Claude do instead?\n\n❯\n";
+
+			const result = await runner.getStatus("planner");
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.value).toBe("idle");
+		});
+
 		test("detects active status", async () => {
 			await runner.createSession("myproject");
 			await runner.spawn(
