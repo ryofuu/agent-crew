@@ -1,27 +1,19 @@
 {
-	"name": "agent-crew",
-	"version": "0.1.0",
-	"type": "module",
-	"bin": {
-		"crew": "./src/index.ts"
-	},
-	"scripts": {
-		"dev": "bun run src/index.ts",
-		"build": "bun build src/index.ts --target=bun --outfile=dist/crew",
-		"test": "bun test",
-		"typecheck": "tsc --noEmit",
-		"lint": "biome check .",
-		"format": "biome format --write ."
-	},
-	"dependencies": {
-		"commander": "14.0.3",
-		"gray-matter": "4.0.3",
-		"js-yaml": "4.1.1",
-		"zod": "3.25.76"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "1.9.4",
-		"@types/js-yaml": "4.0.9",
-		"typescript": "5.9.3"
-	}
+  "name": "agent-crew",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun tsc --noEmit",
+    "lint": "biome lint",
+    "lint:fix": "biome lint --fix"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
 }
