@@ -167,6 +167,10 @@ async function tryAdvanceStage(
 	if (!newState.ok || newState.value.status !== "running") return "continue";
 
 	const nextIdx = newState.value.currentStageIndex;
+	// Detect loop: stage index went backwards → reset prompt tracking
+	if (nextIdx < state.currentStageIndex) {
+		ctx.promptedStageIndex = -1;
+	}
 	const nextStage = newState.value.stages[nextIdx];
 	const nextDef = ctx.stages[nextIdx];
 	if (nextStage?.status === "active" && nextDef) {
@@ -183,6 +187,27 @@ async function tryAdvanceStage(
 	return "continue";
 }
 
+/** Prompt the current stage's agent if it became active (e.g. after gate approval) and hasn't been prompted yet. */
+async function promptIfNeeded(ctx: PollContext): Promise<void> {
+	const stateResult = await ctx.engine.getState();
+	if (!stateResult.ok || stateResult.value.status !== "running") return;
+
+	const idx = stateResult.value.currentStageIndex;
+	const stage = stateResult.value.stages[idx];
+	const def = ctx.stages[idx];
+	if (stage?.status === "active" && def && idx > ctx.promptedStageIndex) {
+		console.log(`Prompting '${def.role}' for stage '${stage.name}'...`);
+		await promptAgent(
+			ctx.runner,
+			def.role,
+			def.role,
+			ctx.goal,
+			ctx.workflowName,
+		);
+		ctx.promptedStageIndex = idx;
+	}
+}
+
 async function pollLoop(
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
@@ -190,6 +215,7 @@ async function pollLoop(
 	stages: StageDefinition[],
 	goal: string,
 	workflowName: string,
+	promptedStageIndex: number,
 	pollInterval: number,
 	signal: AbortSignal,
 ): Promise<void> {
@@ -200,7 +226,7 @@ async function pollLoop(
 		stages,
 		goal,
 		workflowName,
-		promptedStageIndex: 0,
+		promptedStageIndex,
 	};
 
 	while (!signal.aborted) {
@@ -219,6 +245,9 @@ async function pollLoop(
 
 		const shouldContinue = await handleGate(engine);
 		if (!shouldContinue) break;
+
+		// After gate approval, prompt the agent if the stage is newly active
+		await promptIfNeeded(ctx);
 
 		const action = await tryAdvanceStage(ctx);
 		if (action === "break") break;
@@ -298,6 +327,7 @@ export async function startCommand(
 	console.log(`tmux session: crew-${config.project_name}`);
 
 	// Send initial prompt to the first active stage's agent
+	let promptedStageIndex = -1;
 	const stateResult = await engine.getState();
 	if (stateResult.ok) {
 		const idx = stateResult.value.currentStageIndex;
@@ -306,6 +336,7 @@ export async function startCommand(
 		if (stage?.status === "active" && def) {
 			console.log(`Sending initial prompt to '${def.role}'...`);
 			await promptAgent(runner, def.role, def.role, goal, workflowName);
+			promptedStageIndex = idx;
 		}
 	}
 
@@ -329,6 +360,7 @@ export async function startCommand(
 		stageDefs,
 		goal,
 		workflowName,
+		promptedStageIndex,
 		pollInterval,
 		abortController.signal,
 	);
