@@ -1,7 +1,6 @@
 import * as path from "node:path";
-import { AgentRunner } from "../../runner/AgentRunner.js";
-import { Tmux } from "../../runner/tmux.js";
-import { WorkflowEngine } from "../../workflow/WorkflowEngine.js";
+import { AgentRunner, Tmux } from "../../runner/index.js";
+import { WorkflowEngine } from "../../workflow/index.js";
 import { readConfig } from "../config.js";
 
 export async function stopCommand(_options: {

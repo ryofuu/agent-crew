@@ -1,7 +1,7 @@
 ---
 id: TICKET-005
 title: "Agent Runner Module: tmux セッション管理 + エージェント起動/停止"
-status: dev_done
+status: closed
 assignee: "implementer-1"
 priority: high
 depends_on: [TICKET-002]
@@ -148,3 +148,23 @@ clearCommand: '\x1b'  // Escape のみ
 6. `writeInbox` を atomic write（read → tmp write → rename）に修正
 7. マジックナンバーを名前付き定数に変更（`CONTEXT_RESET_DELAY_MS`）
 8. `getSessionName()`, `setSessionName()` を追加（crew stop でのセッション名復元用）
+
+### Round 2 (2026-02-25T15:08:51+09:00)
+
+**Verdict**: APPROVED
+
+#### Code Quality
+- [medium] `src/runner/tmux.ts:76` — `Bun.sleep(300)` がマジックナンバーのまま。`CONTEXT_RESET_DELAY_MS` は抽出されたが tmux.ts の 300ms は未対応
+- [medium] `src/runner/adapters/types.ts:26` — `detectAgentStatus` の idle 検知で `>` 文字が CLI 出力中の `>` と誤マッチする可能性あり（false positive）
+- [low] `tests/runner/AgentRunner.test.ts` — `validateAgentName` の拒否テストがない（`../evil` 等）
+
+#### Security
+- なし。R1 の全 critical/high 問題（command injection, control character injection, path traversal, non-atomic write）は正しく修正されている
+- [medium] `src/runner/AgentRunner.ts:72` — `projectName` から構築される tmux session 名が tmux セッション名規則に対するバリデーションなし。`config.yaml` 手動編集で `:` や `.` を含む名前を設定可能。`ConfigSchema` に `project_name: z.string().regex(/^[a-zA-Z0-9_-]+$/)` を追加推奨
+
+#### Architecture
+- [medium] `src/runner/AgentRunner.ts:44-46` — agents Map/sessionName がインメモリのみでプロセス再起動後に失われる点は R1 から既知。R2 で `setSessionName()` による部分修正がされた。完全な永続化は MVP 後の改善事項として許容
+- [medium] `src/runner/AgentRunner.ts:89-103` — `setupLayout` が 3 エージェント前提のハードコード。`tiled` レイアウトは `agentCount > 2` で適用すべき
+
+#### Required Changes
+- なし（medium 以下のみ。既知のセッション永続化課題は MVP スコープ外として許容）

@@ -84,6 +84,9 @@ export class TaskStore implements TaskStorePort {
 			labels: data.labels ?? [],
 		};
 
+		const idCheck = this.validateTaskId(id);
+		if (!idCheck.ok) return idCheck;
+
 		const body =
 			data.body ??
 			`# ${id}: ${data.title}

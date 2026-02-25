@@ -1,9 +1,8 @@
 import * as path from "node:path";
 import type { CliType } from "../../kernel/index.js";
-import { AgentRunner } from "../../runner/AgentRunner.js";
-import { Tmux } from "../../runner/tmux.js";
-import type { WorkflowEnginePort } from "../../workflow/WorkflowEngine.js";
-import { WorkflowEngine } from "../../workflow/WorkflowEngine.js";
+import { AgentRunner, Tmux } from "../../runner/index.js";
+import type { WorkflowEnginePort } from "../../workflow/index.js";
+import { WorkflowEngine } from "../../workflow/index.js";
 import type { Config } from "../config.js";
 import { readConfig } from "../config.js";
 

@@ -7,19 +7,7 @@ import type { WorkflowDefinition } from "./schema.js";
 import { WorkflowDefinitionSchema } from "./schema.js";
 import type { StageState, WorkflowState } from "./state.js";
 import { readState, writeState } from "./state.js";
-
-export interface WorkflowEnginePort {
-	start(workflowName: string, goal: string): Promise<Result<void, string>>;
-	advance(): Promise<Result<void, string>>;
-	pause(): Promise<Result<void, string>>;
-	resume(): Promise<Result<void, string>>;
-	stop(): Promise<Result<void, string>>;
-	getState(): Promise<Result<WorkflowState, string>>;
-	getCurrentStage(): Promise<Result<StageState | null, string>>;
-	canAdvance(): Promise<Result<boolean, string>>;
-	approveGate(): Promise<Result<void, string>>;
-	rejectGate(): Promise<Result<void, string>>;
-}
+import type { WorkflowEnginePort } from "./types.js";
 
 export class WorkflowEngine implements WorkflowEnginePort {
 	private readonly crewDir: string;
@@ -113,7 +101,12 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		} else {
 			// All stages complete — evaluate loop or close
 			const loopResult = this.evaluateLoopOrClose(state, def);
-			if (!loopResult.ok) return loopResult;
+			if (!loopResult.ok) {
+				// Persist error state to disk before returning
+				state.updatedAt = new Date().toISOString();
+				await writeState(this.crewDir, state);
+				return loopResult;
+			}
 		}
 
 		state.updatedAt = new Date().toISOString();
