@@ -3,7 +3,7 @@ import * as path from "node:path";
 import yaml from "js-yaml";
 import type { Result } from "../kernel/index.js";
 import { err, ok, WorkflowErrors } from "../kernel/index.js";
-import type { WorkflowDefinition } from "./schema.js";
+import type { StageDefinition, WorkflowDefinition } from "./schema.js";
 import { WorkflowDefinitionSchema } from "./schema.js";
 import type { StageState, WorkflowState } from "./state.js";
 import { readState, writeState } from "./state.js";
@@ -224,6 +224,11 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		}
 
 		return ok(undefined);
+	}
+
+	getStageDefinitions(): Result<StageDefinition[], string> {
+		if (!this.definition) return err(WorkflowErrors.NOT_RUNNING);
+		return ok(this.definition.stages);
 	}
 
 	private async ensureRunning(): Promise<Result<WorkflowState, string>> {

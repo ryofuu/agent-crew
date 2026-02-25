@@ -20,6 +20,14 @@ export interface AgentRunnerPort {
 	stop(agentName: string): Promise<Result<void, string>>;
 	stopAll(): Promise<Result<void, string>>;
 	sendNudge(agentName: string, message: string): Promise<Result<void, string>>;
+	sendInitialPrompt(
+		agentName: string,
+		prompt: string,
+	): Promise<Result<void, string>>;
+	waitForReady(
+		agentName: string,
+		timeoutMs: number,
+	): Promise<Result<void, string>>;
 	resetContext(agentName: string): Promise<Result<void, string>>;
 	getStatus(agentName: string): Promise<Result<AgentStatus, string>>;
 	getAllStatuses(): Promise<Result<Record<string, AgentStatus>, string>>;
@@ -144,6 +152,45 @@ export class AgentRunner implements AgentRunnerPort {
 			await this.stop(name);
 		}
 		return ok(undefined);
+	}
+
+	async waitForReady(
+		agentName: string,
+		timeoutMs: number,
+	): Promise<Result<void, string>> {
+		const agent = this.agents.get(agentName);
+		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
+
+		const start = Date.now();
+		let sawActive = false;
+
+		while (Date.now() - start < timeoutMs) {
+			const status = await this.getStatus(agentName);
+			if (status.ok) {
+				if (status.value === "active") sawActive = true;
+				if (sawActive && status.value === "idle") return ok(undefined);
+			}
+			await Bun.sleep(1000);
+		}
+		// Proceed even on timeout — CLI may have a non-standard prompt
+		return ok(undefined);
+	}
+
+	async sendInitialPrompt(
+		agentName: string,
+		prompt: string,
+	): Promise<Result<void, string>> {
+		const agent = this.agents.get(agentName);
+		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
+
+		const promptDir = path.join(this.crewDir, "prompts");
+		await fs.promises.mkdir(promptDir, { recursive: true });
+		const promptPath = path.join(promptDir, `${agentName}.md`);
+		const tmpPath = `${promptPath}.tmp`;
+		await fs.promises.writeFile(tmpPath, prompt, "utf-8");
+		await fs.promises.rename(tmpPath, promptPath);
+
+		return this.tmux.sendPromptFile(agent.pane, promptPath);
 	}
 
 	async sendNudge(

@@ -1,0 +1,20 @@
+name: simple-flow
+description: "Quick verification: Plan → Implement → Review (no gates, no loop)"
+loop_on_changes: false
+max_cycles: 1
+stages:
+  - name: plan
+    role: planner
+    model: claude-opus-4-6
+    human_gate: false
+    context_reset: false
+  - name: implement
+    role: implementer
+    model: codex-1
+    human_gate: false
+    context_reset: true
+  - name: review
+    role: reviewer
+    model: claude-opus-4-6
+    human_gate: false
+    context_reset: true

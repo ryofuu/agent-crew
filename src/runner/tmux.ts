@@ -12,6 +12,10 @@ export interface TmuxPort {
 	): Promise<Result<void, string>>;
 	sendKeys(target: string, keys: string): Promise<Result<void, string>>;
 	sendText(target: string, text: string): Promise<Result<void, string>>;
+	sendPromptFile(
+		target: string,
+		filePath: string,
+	): Promise<Result<void, string>>;
 	capturePane(target: string): Promise<Result<string, string>>;
 	selectLayout(session: string, layout: string): Promise<Result<void, string>>;
 }
@@ -75,6 +79,20 @@ export class Tmux implements TmuxPort {
 
 		await Bun.sleep(300);
 
+		return this.sendKeys(target, "Enter");
+	}
+
+	async sendPromptFile(
+		target: string,
+		filePath: string,
+	): Promise<Result<void, string>> {
+		const loadResult = await this.run(["load-buffer", filePath]);
+		if (!loadResult.ok) return loadResult;
+
+		const pasteResult = await this.run(["paste-buffer", "-p", "-t", target]);
+		if (!pasteResult.ok) return pasteResult;
+
+		await Bun.sleep(300);
 		return this.sendKeys(target, "Enter");
 	}
 

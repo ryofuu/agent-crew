@@ -1,4 +1,5 @@
 import type { Result } from "../kernel/index.js";
+import type { StageDefinition } from "./schema.js";
 import type { StageState, WorkflowState } from "./state.js";
 
 export interface WorkflowEnginePort {
@@ -12,4 +13,5 @@ export interface WorkflowEnginePort {
 	canAdvance(): Promise<Result<boolean, string>>;
 	approveGate(): Promise<Result<void, string>>;
 	rejectGate(): Promise<Result<void, string>>;
+	getStageDefinitions(): Result<StageDefinition[], string>;
 }

@@ -49,6 +49,14 @@ class MockTmux implements TmuxPort {
 		return Promise.resolve(ok(undefined));
 	}
 
+	sendPromptFile(
+		target: string,
+		filePath: string,
+	): Promise<Result<void, string>> {
+		this.calls.push({ method: "sendPromptFile", args: [target, filePath] });
+		return Promise.resolve(ok(undefined));
+	}
+
 	capturePane(target: string): Promise<Result<string, string>> {
 		this.calls.push({ method: "capturePane", args: [target] });
 		return Promise.resolve(ok(this.captureOutput));
@@ -233,6 +241,70 @@ describe("AgentRunner", () => {
 			const inboxPath = path.join(tmpDir, "inbox", "planner.md");
 			const content = await fs.promises.readFile(inboxPath, "utf-8");
 			expect(content).toContain("New task available");
+		});
+	});
+
+	describe("sendInitialPrompt", () => {
+		test("writes prompt file and calls sendPromptFile", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.calls = [];
+			const result = await runner.sendInitialPrompt("planner", "Do the thing");
+			expect(result.ok).toBe(true);
+
+			// Verify prompt file was written
+			const promptPath = path.join(tmpDir, "prompts", "planner.md");
+			const content = await fs.promises.readFile(promptPath, "utf-8");
+			expect(content).toBe("Do the thing");
+
+			// Verify sendPromptFile was called
+			const promptCalls = mockTmux.calls.filter(
+				(c) => c.method === "sendPromptFile",
+			);
+			expect(promptCalls.length).toBe(1);
+		});
+
+		test("returns error for nonexistent agent", async () => {
+			const result = await runner.sendInitialPrompt("ghost", "Hello");
+			expect(result.ok).toBe(false);
+		});
+	});
+
+	describe("waitForReady", () => {
+		test("resolves when agent transitions active→idle", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			// Start active, then switch to idle after first poll
+			let callCount = 0;
+			mockTmux.captureOutput = "Loading claude...";
+			const origCapture = mockTmux.capturePane.bind(mockTmux);
+			mockTmux.capturePane = (target: string) => {
+				callCount++;
+				if (callCount >= 2) {
+					mockTmux.captureOutput = "user@host ~ $ ";
+				}
+				return origCapture(target);
+			};
+
+			const result = await runner.waitForReady("planner", 5000);
+			expect(result.ok).toBe(true);
+		});
+
+		test("returns error for nonexistent agent", async () => {
+			const result = await runner.waitForReady("ghost", 1000);
+			expect(result.ok).toBe(false);
 		});
 	});
 

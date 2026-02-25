@@ -107,6 +107,8 @@ describe("stop command", () => {
 				Promise.resolve({ ok: true as const, value: undefined }),
 			sendKeys: () => Promise.resolve({ ok: true as const, value: undefined }),
 			sendText: () => Promise.resolve({ ok: true as const, value: undefined }),
+			sendPromptFile: () =>
+				Promise.resolve({ ok: true as const, value: undefined }),
 			capturePane: () => Promise.resolve({ ok: true as const, value: "" }),
 			selectLayout: () =>
 				Promise.resolve({ ok: true as const, value: undefined }),

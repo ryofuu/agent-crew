@@ -241,4 +241,23 @@ describe("WorkflowEngine", () => {
 			}
 		});
 	});
+
+	describe("getStageDefinitions", () => {
+		test("returns stage definitions after start", async () => {
+			await engine.start("test-flow", "Goal");
+			const result = await engine.getStageDefinitions();
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				expect(result.value.length).toBe(3);
+				expect(result.value[0]?.role).toBe("planner");
+				expect(result.value[1]?.role).toBe("implementer");
+				expect(result.value[2]?.role).toBe("reviewer");
+			}
+		});
+
+		test("returns error before start", async () => {
+			const result = await engine.getStageDefinitions();
+			expect(result.ok).toBe(false);
+		});
+	});
 });
