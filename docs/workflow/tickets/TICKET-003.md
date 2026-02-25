@@ -119,3 +119,36 @@ labels: []
 ## Blocker
 
 ## Review Feedback
+
+### Round 1 (2026-02-25T12:00:00+09:00)
+
+**Verdict**: BLOCKED
+
+#### Code Quality
+- [medium] `TaskStore.nextId()` に競合状態あり。2つの並行呼び出しが同じカウンタ値を読み取り、重複IDを生成する可能性がある
+- [medium] `watch()` / `stopWatch()` のテストが存在しない。コールバック発火のテストが必要
+- [low] `list()` のエラー時に `TASK_NOT_FOUND` を返しているが、`READ_FAILED` が適切
+- [medium] `src/store/TaskStore.ts:4` — `TaskStatus` が未使用 import（Biome lint エラー）
+
+#### Security
+- [critical] `src/store/TaskStore.ts:208` — `gray-matter` が JavaScript エンジン（`eval()`）を内蔵しており、タスクファイルの frontmatter に `---js` を指定するとコード実行が可能（CVE-2021-23398 関連）。`matter(raw, { language: "yaml" })` オプションで YAML エンジンに強制する必要あり
+- [high] `src/store/TaskStore.ts:27-29` — `getTaskFilePath(id)` で ID のバリデーションなし。`../../etc/passwd` のようなパストラバーサルが可能。`/^TASK-\d{3,}$/` でバリデーションすること
+- [high] `src/store/TaskStore.ts:209` — `data as TaskFrontmatter` の unsafe cast。`id` と `status` のみ検証で、他フィールドの型安全性なし。Zod スキーマでバリデーションすべき
+
+#### Architecture
+- なし。Port パターン、atomic write パターンは正しく適用されている。
+
+#### Required Changes
+1. [src/store/TaskStore.ts:208] `matter(raw)` → `matter(raw, { language: "yaml" })` で JS エンジンを無効化
+2. [src/store/TaskStore.ts:27-29] `getTaskFilePath` に ID フォーマットバリデーション（`/^TASK-\d{3,}$/`）と `path.resolve` によるパストラバーサル防止を追加
+3. [src/store/TaskStore.ts:209] `data as TaskFrontmatter` を Zod スキーマバリデーションに置換
+
+## Re-implementation Notes (Round 2)
+
+1. `matter(raw, { language: "yaml" })` — JS エンジン無効化完了
+2. `getTaskFilePath` — `path.resolve` でパストラバーサル防止、`validateTaskId` で `/^TASK-\d{3,}$/` バリデーション追加（`get`, `update` の入口で検証）
+3. `TaskFrontmatterSchema` を Zod で定義（`src/store/types.ts`）、`parseTaskFile` で `safeParse` に置換
+4. `list()` のエラーコード: `TASK_NOT_FOUND` → `READ_FAILED` に修正
+5. `TaskStoreErrors` に `READ_FAILED`, `INVALID_ID` を追加
+6. watch テスト追加（mtime 変更検知のコールバック発火を検証）
+7. ID バリデーションテスト追加（不正 ID でのget/update 拒否を検証）

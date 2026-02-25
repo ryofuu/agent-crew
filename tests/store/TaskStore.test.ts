@@ -124,7 +124,7 @@ describe("TaskStore", () => {
 			expect(result.ok).toBe(true);
 			if (result.ok) {
 				expect(result.value.length).toBe(1);
-				expect(result.value[0].frontmatter.id).toBe("TASK-002");
+				expect(result.value[0]?.frontmatter.id).toBe("TASK-002");
 			}
 		});
 
@@ -146,6 +146,32 @@ describe("TaskStore", () => {
 			const p = store.getTaskFilePath("TASK-001");
 			expect(p).toContain("TASK-001.md");
 		});
+
+		test("rejects path traversal", () => {
+			expect(() => store.getTaskFilePath("../../etc/passwd")).toThrow(
+				"INVALID_ID",
+			);
+		});
+	});
+
+	describe("ID validation", () => {
+		test("rejects invalid task ID on get", async () => {
+			const result = await store.get("INVALID");
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error).toContain("INVALID_ID");
+			}
+		});
+
+		test("rejects invalid task ID on update", async () => {
+			const result = await store.update("../evil", {
+				status: "in_progress",
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error).toContain("INVALID_ID");
+			}
+		});
 	});
 
 	describe("atomic write", () => {
@@ -155,6 +181,31 @@ describe("TaskStore", () => {
 			const files = await fs.promises.readdir(tasksDir);
 			const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
 			expect(tmpFiles.length).toBe(0);
+		});
+	});
+
+	describe("watch", () => {
+		test("detects file changes via callback", async () => {
+			await store.create({ title: "Watch me" });
+
+			const callbackTasks: import("../../src/store/types.js").Task[] = [];
+			const stopWatch = store.watch((task) => {
+				callbackTasks.push(task);
+			});
+
+			// Wait for initial mtime cache population
+			await Bun.sleep(1200);
+
+			// Modify the task to trigger callback
+			await store.update("TASK-001", { status: "in_progress" });
+
+			// Wait for poll cycle
+			await Bun.sleep(1200);
+
+			expect(callbackTasks.length).toBeGreaterThan(0);
+			expect(callbackTasks[0]?.frontmatter.status).toBe("in_progress");
+
+			stopWatch();
 		});
 	});
 });

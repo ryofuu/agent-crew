@@ -136,3 +136,40 @@ type WorkflowState = {
 ## Blocker
 
 ## Review Feedback
+
+### Round 1 (2026-02-25T12:00:00+09:00)
+
+**Verdict**: BLOCKED
+
+#### Code Quality
+- [critical] `src/workflow/WorkflowEngine.ts` — TypeScript strict エラー 15 件。`noUncheckedIndexedAccess: true` により `state.stages[index]` アクセスが `T | undefined` を返すが、null チェックなし。全箇所でガード節を追加し `err()` を返すこと
+  - L64, L66-67, L83, L88, L94, L96-97, L160, L168, L171, L181, L206, L208-209
+- [critical] `tests/workflow/WorkflowEngine.test.ts` — TypeScript エラー 8 件。テスト内の `state.value.stages[N]` アクセスでも同様
+  - L77-78, L100, L114-115, L147, L197
+- [medium] `src/workflow/WorkflowEngine.ts:4` — `WorkflowStatus` が未使用 import（Biome lint エラー）
+- [medium] `src/workflow/WorkflowEngine.ts:148` — `getState` が async だが await を使用していない
+
+#### Security
+- [high] `src/workflow/WorkflowEngine.ts:233-249` — `loadDefinition(workflowName)` でワークフロー名のバリデーションなし。`../../malicious` のようなパストラバーサルが可能。`/^[a-zA-Z0-9_-]+$/` で制限すること
+- [medium] `src/workflow/WorkflowEngine.ts:238` & `src/cli/config.ts:41` — `yaml.load()` が明示的なスキーマ指定なし。js-yaml v4 のデフォルトは安全だが、明示的に `{ schema: yaml.JSON_SCHEMA }` を指定すべき
+- [high] `src/workflow/state.ts:28` — `JSON.parse(raw) as WorkflowState` の unsafe cast。Zod バリデーションに置換すべき
+- [medium] `src/cli/config.ts:52-61` — `writeConfig` が atomic write を使用していない。tmp→rename パターンに修正
+
+#### Architecture
+- [medium] ワークフロー状態遷移が手続き的コードに散在。TaskStore の `VALID_TRANSITIONS` のような宣言的マトリクスに統一すべき
+- [medium] `src/workflow/schema.ts:9` — `on_complete` フィールドがパースされるが WorkflowEngine では一切使用されない。実装するか削除すべき
+
+#### Required Changes
+1. [src/workflow/WorkflowEngine.ts] 全15箇所の `state.stages[index]` アクセスにガード節を追加し TypeScript エラーを解消
+2. [tests/workflow/WorkflowEngine.test.ts] 全8箇所の配列アクセスに null チェックまたは `!` アサーションを追加
+3. [src/workflow/WorkflowEngine.ts:233] `loadDefinition` にワークフロー名バリデーション追加
+4. [src/workflow/state.ts:28] `JSON.parse` の結果を Zod でバリデーション
+5. [src/cli/config.ts:55] `writeConfig` を atomic write に修正
+
+## Re-implementation Notes (Round 2)
+
+1. TS strict エラー — 既にガード節が適用済み（前回の実装で対応済み）、テストも `?.` で安全にアクセス
+2. `loadDefinition` — `/^[a-zA-Z0-9_-]+$/` でワークフロー名バリデーション追加
+3. `state.ts` — `WorkflowStateSchema` を Zod で定義、`readState` で `safeParse` に置換
+4. `writeConfig` — atomic write（tmp→rename）パターンに修正
+5. `yaml.load` — `{ schema: yaml.JSON_SCHEMA }` を明示的に指定（WorkflowEngine, config.ts 両方）

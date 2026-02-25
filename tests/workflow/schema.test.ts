@@ -6,7 +6,10 @@ import { WorkflowDefinitionSchema } from "../../src/workflow/schema.js";
 
 describe("dev-cycle.yaml schema validation", () => {
 	test("dev-cycle.yaml passes Zod validation", async () => {
-		const templatePath = path.join(import.meta.dir, "../../templates/dev-cycle.yaml");
+		const templatePath = path.join(
+			import.meta.dir,
+			"../../templates/dev-cycle.yaml",
+		);
 		const raw = await fs.promises.readFile(templatePath, "utf-8");
 		const parsed = yaml.load(raw);
 		const result = WorkflowDefinitionSchema.safeParse(parsed);

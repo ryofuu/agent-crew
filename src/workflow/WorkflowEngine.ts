@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
-import { WorkflowErrors, err, ok } from "../kernel/index.js";
-import type { Result, WorkflowStatus } from "../kernel/index.js";
-import { WorkflowDefinitionSchema } from "./schema.js";
+import type { Result } from "../kernel/index.js";
+import { err, ok, WorkflowErrors } from "../kernel/index.js";
 import type { WorkflowDefinition } from "./schema.js";
+import { WorkflowDefinitionSchema } from "./schema.js";
 import type { StageState, WorkflowState } from "./state.js";
 import { readState, writeState } from "./state.js";
 
@@ -30,12 +30,18 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		this.crewDir = crewDir;
 		this.searchPaths = searchPaths ?? [
 			path.join(crewDir, "workflows"),
-			path.join(process.env.CREW_HOME ?? path.join(process.env.HOME ?? "", ".crew"), "workflows"),
+			path.join(
+				process.env.CREW_HOME ?? path.join(process.env.HOME ?? "", ".crew"),
+				"workflows",
+			),
 			path.join(import.meta.dir, "../../templates"),
 		];
 	}
 
-	async start(workflowName: string, goal: string): Promise<Result<void, string>> {
+	async start(
+		workflowName: string,
+		goal: string,
+	): Promise<Result<void, string>> {
 		const existing = await readState(this.crewDir);
 		if (existing.ok && existing.value.status === "running") {
 			return err(WorkflowErrors.ALREADY_RUNNING);
@@ -61,10 +67,14 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		};
 
 		// Activate the first stage
-		state.stages[0].status = "active";
-		const stageDef = this.definition.stages[0];
-		if (stageDef.human_gate) {
-			state.stages[0].status = "waiting_gate";
+		const firstStage = state.stages[0];
+		const firstDef = this.definition.stages[0];
+		if (!(firstStage && firstDef)) {
+			return err(WorkflowErrors.INVALID_DEFINITION);
+		}
+		firstStage.status = "active";
+		if (firstDef.human_gate) {
+			firstStage.status = "waiting_gate";
 		}
 
 		return writeState(this.crewDir, state);
@@ -80,6 +90,7 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		const def = defResult.value;
 
 		const currentStage = state.stages[state.currentStageIndex];
+		if (!currentStage) return err(WorkflowErrors.INVALID_DEFINITION);
 		if (currentStage.status === "waiting_gate") {
 			return err(WorkflowErrors.GATE_PENDING);
 		}
@@ -89,12 +100,15 @@ export class WorkflowEngine implements WorkflowEnginePort {
 
 		const nextIndex = state.currentStageIndex + 1;
 		if (nextIndex < state.stages.length) {
+			const nextStage = state.stages[nextIndex];
+			const nextDef = def.stages[nextIndex];
+			if (!(nextStage && nextDef))
+				return err(WorkflowErrors.INVALID_DEFINITION);
 			// Move to next stage
 			state.currentStageIndex = nextIndex;
-			state.stages[nextIndex].status = "active";
-			const nextDef = def.stages[nextIndex];
+			nextStage.status = "active";
 			if (nextDef.human_gate) {
-				state.stages[nextIndex].status = "waiting_gate";
+				nextStage.status = "waiting_gate";
 			}
 		} else {
 			// All stages complete — evaluate loop or close
@@ -140,7 +154,7 @@ export class WorkflowEngine implements WorkflowEnginePort {
 	}
 
 	async getState(): Promise<Result<WorkflowState, string>> {
-		return readState(this.crewDir);
+		return await readState(this.crewDir);
 	}
 
 	async getCurrentStage(): Promise<Result<StageState | null, string>> {
@@ -157,6 +171,7 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		const state = stateResult.value;
 		if (state.status !== "running") return ok(false);
 		const stage = state.stages[state.currentStageIndex];
+		if (!stage) return ok(false);
 		return ok(stage.status === "active");
 	}
 
@@ -165,7 +180,7 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		if (!stateResult.ok) return stateResult;
 		const state = stateResult.value;
 		const stage = state.stages[state.currentStageIndex];
-		if (stage.status !== "waiting_gate") {
+		if (!stage || stage.status !== "waiting_gate") {
 			return err(WorkflowErrors.GATE_PENDING);
 		}
 		stage.status = "active";
@@ -178,7 +193,7 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		if (!stateResult.ok) return stateResult;
 		const state = stateResult.value;
 		const stage = state.stages[state.currentStageIndex];
-		if (stage.status !== "waiting_gate") {
+		if (!stage || stage.status !== "waiting_gate") {
 			return err(WorkflowErrors.GATE_PENDING);
 		}
 		state.status = "completed";
@@ -186,7 +201,10 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		return writeState(this.crewDir, state);
 	}
 
-	private evaluateLoopOrClose(state: WorkflowState, def: WorkflowDefinition): Result<void, string> {
+	private evaluateLoopOrClose(
+		state: WorkflowState,
+		def: WorkflowDefinition,
+	): Result<void, string> {
 		if (!def.loop_on_changes) {
 			state.status = "completed";
 			return ok(undefined);
@@ -203,10 +221,13 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		for (const stage of state.stages) {
 			stage.status = "pending";
 		}
-		state.stages[0].status = "active";
-		const firstDef = def.stages[0];
-		if (firstDef.human_gate) {
-			state.stages[0].status = "waiting_gate";
+		const loopFirstStage = state.stages[0];
+		const loopFirstDef = def.stages[0];
+		if (!(loopFirstStage && loopFirstDef))
+			return err(WorkflowErrors.INVALID_DEFINITION);
+		loopFirstStage.status = "active";
+		if (loopFirstDef.human_gate) {
+			loopFirstStage.status = "waiting_gate";
 		}
 
 		return ok(undefined);
@@ -230,17 +251,26 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		return result;
 	}
 
-	private async loadDefinition(workflowName: string): Promise<Result<WorkflowDefinition, string>> {
+	private async loadDefinition(
+		workflowName: string,
+	): Promise<Result<WorkflowDefinition, string>> {
+		if (!/^[a-zA-Z0-9_-]+$/.test(workflowName)) {
+			return err(
+				`${WorkflowErrors.INVALID_DEFINITION}: invalid workflow name: ${workflowName}`,
+			);
+		}
 		for (const dir of this.searchPaths) {
 			const filePath = path.join(dir, `${workflowName}.yaml`);
 			try {
 				const raw = await fs.promises.readFile(filePath, "utf-8");
-				const parsed = yaml.load(raw);
+				const parsed = yaml.load(raw, { schema: yaml.JSON_SCHEMA });
 				const validated = WorkflowDefinitionSchema.safeParse(parsed);
 				if (validated.success) {
 					return ok(validated.data);
 				}
-				return err(`${WorkflowErrors.INVALID_DEFINITION}: ${validated.error.message}`);
+				return err(
+					`${WorkflowErrors.INVALID_DEFINITION}: ${validated.error.message}`,
+				);
 			} catch {
 				// file not found in this search path, try next
 			}

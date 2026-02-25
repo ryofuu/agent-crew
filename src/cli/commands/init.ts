@@ -18,7 +18,11 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	}
 
 	// Create _counter.txt
-	await fs.promises.writeFile(path.join(crewDir, "tasks", "_counter.txt"), "0", "utf-8");
+	await fs.promises.writeFile(
+		path.join(crewDir, "tasks", "_counter.txt"),
+		"0",
+		"utf-8",
+	);
 
 	// Create initial state.json
 	await fs.promises.writeFile(path.join(crewDir, "state.json"), "{}", "utf-8");
@@ -37,7 +41,9 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	} catch {
 		// no .gitignore yet
 	}
-	const toAdd = gitignoreEntries.filter((entry) => !gitignoreContent.includes(entry));
+	const toAdd = gitignoreEntries.filter(
+		(entry) => !gitignoreContent.includes(entry),
+	);
 	if (toAdd.length > 0) {
 		const newContent = `${gitignoreContent.trimEnd()}\n\n# agent-crew\n${toAdd.join("\n")}\n`;
 		await fs.promises.writeFile(gitignorePath, newContent, "utf-8");

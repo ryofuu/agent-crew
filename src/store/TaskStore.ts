@@ -1,17 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import matter from "gray-matter";
-import { TaskStoreErrors, err, ok } from "../kernel/index.js";
-import type { Result, TaskStatus } from "../kernel/index.js";
+import type { Result } from "../kernel/index.js";
+import { err, ok, TaskStoreErrors } from "../kernel/index.js";
 import { isValidTransition } from "./transitions.js";
-import type {
-	CreateTaskInput,
-	Task,
-	TaskFilter,
-	TaskFrontmatter,
-	TaskStorePort,
-	UpdateTaskInput,
+import {
+	type CreateTaskInput,
+	type Task,
+	type TaskFilter,
+	type TaskFrontmatter,
+	TaskFrontmatterSchema,
+	type TaskStorePort,
+	type UpdateTaskInput,
 } from "./types.js";
+
+const TASK_ID_PATTERN = /^TASK-\d{3,}$/;
 
 export class TaskStore implements TaskStorePort {
 	private readonly tasksDir: string;
@@ -25,7 +28,22 @@ export class TaskStore implements TaskStorePort {
 	}
 
 	getTaskFilePath(id: string): string {
-		return path.join(this.tasksDir, `${id}.md`);
+		const filePath = path.join(this.tasksDir, `${id}.md`);
+		const resolved = path.resolve(filePath);
+		const resolvedTasksDir = path.resolve(this.tasksDir);
+		if (!resolved.startsWith(`${resolvedTasksDir}${path.sep}`)) {
+			throw new Error(`${TaskStoreErrors.INVALID_ID}: path traversal detected`);
+		}
+		return filePath;
+	}
+
+	private validateTaskId(id: string): Result<void, string> {
+		if (!TASK_ID_PATTERN.test(id)) {
+			return err(
+				`${TaskStoreErrors.INVALID_ID}: invalid task ID format: ${id}`,
+			);
+		}
+		return ok(undefined);
 	}
 
 	async nextId(): Promise<Result<string, string>> {
@@ -94,7 +112,13 @@ export class TaskStore implements TaskStorePort {
 		}
 	}
 
-	async update(id: string, patch: UpdateTaskInput): Promise<Result<Task, string>> {
+	async update(
+		id: string,
+		patch: UpdateTaskInput,
+	): Promise<Result<Task, string>> {
+		const idCheck = this.validateTaskId(id);
+		if (!idCheck.ok) return idCheck;
+
 		const existing = await this.get(id);
 		if (!existing.ok) return existing;
 
@@ -132,6 +156,9 @@ export class TaskStore implements TaskStorePort {
 	}
 
 	async get(id: string): Promise<Result<Task, string>> {
+		const idCheck = this.validateTaskId(id);
+		if (!idCheck.ok) return idCheck;
+
 		const filePath = this.getTaskFilePath(id);
 		try {
 			const raw = await fs.promises.readFile(filePath, "utf-8");
@@ -145,7 +172,9 @@ export class TaskStore implements TaskStorePort {
 		try {
 			await fs.promises.mkdir(this.tasksDir, { recursive: true });
 			const files = await fs.promises.readdir(this.tasksDir);
-			const taskFiles = files.filter((f) => f.startsWith("TASK-") && f.endsWith(".md"));
+			const taskFiles = files.filter(
+				(f) => f.startsWith("TASK-") && f.endsWith(".md"),
+			);
 
 			const tasks: Task[] = [];
 			for (const file of taskFiles) {
@@ -161,7 +190,7 @@ export class TaskStore implements TaskStorePort {
 
 			return ok(tasks);
 		} catch (e) {
-			return err(`${TaskStoreErrors.TASK_NOT_FOUND}: ${e}`);
+			return err(`${TaskStoreErrors.READ_FAILED}: ${e}`);
 		}
 	}
 
@@ -170,7 +199,9 @@ export class TaskStore implements TaskStorePort {
 		this.watchInterval = setInterval(async () => {
 			try {
 				const files = await fs.promises.readdir(this.tasksDir);
-				const taskFiles = files.filter((f) => f.startsWith("TASK-") && f.endsWith(".md"));
+				const taskFiles = files.filter(
+					(f) => f.startsWith("TASK-") && f.endsWith(".md"),
+				);
 
 				for (const file of taskFiles) {
 					const filePath = path.join(this.tasksDir, file);
@@ -205,12 +236,14 @@ export class TaskStore implements TaskStorePort {
 
 	private parseTaskFile(raw: string, filePath: string): Result<Task, string> {
 		try {
-			const { data, content } = matter(raw);
-			const frontmatter = data as TaskFrontmatter;
-			if (!frontmatter.id || !frontmatter.status) {
-				return err(`${TaskStoreErrors.PARSE_ERROR}: missing required fields in ${filePath}`);
+			const { data, content } = matter(raw, { language: "yaml" });
+			const parsed = TaskFrontmatterSchema.safeParse(data);
+			if (!parsed.success) {
+				return err(
+					`${TaskStoreErrors.VALIDATION_ERROR}: ${parsed.error.message} in ${filePath}`,
+				);
 			}
-			return ok({ frontmatter, body: content, filePath });
+			return ok({ frontmatter: parsed.data, body: content, filePath });
 		} catch (e) {
 			return err(`${TaskStoreErrors.PARSE_ERROR}: ${e}`);
 		}
@@ -221,10 +254,13 @@ export class TaskStore implements TaskStorePort {
 		const fm = task.frontmatter;
 
 		if (filter.status) {
-			const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
+			const statuses = Array.isArray(filter.status)
+				? filter.status
+				: [filter.status];
 			if (!statuses.includes(fm.status)) return false;
 		}
-		if (filter.assignee !== undefined && fm.assignee !== filter.assignee) return false;
+		if (filter.assignee !== undefined && fm.assignee !== filter.assignee)
+			return false;
 		if (filter.stage !== undefined && fm.stage !== filter.stage) return false;
 		if (filter.labels && filter.labels.length > 0) {
 			if (!filter.labels.some((l) => fm.labels.includes(l))) return false;

@@ -33,6 +33,8 @@ export async function doctorCommand(): Promise<void> {
 	if (allOk) {
 		console.log("All checks passed.");
 	} else {
-		console.log("Some checks failed. Install missing tools before running crew.");
+		console.log(
+			"Some checks failed. Install missing tools before running crew.",
+		);
 	}
 }

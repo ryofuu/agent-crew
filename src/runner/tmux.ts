@@ -6,7 +6,10 @@ export interface TmuxPort {
 	hasSession(name: string): Promise<boolean>;
 	newSession(name: string): Promise<Result<void, string>>;
 	killSession(name: string): Promise<Result<void, string>>;
-	splitWindow(session: string, direction: "h" | "v"): Promise<Result<void, string>>;
+	splitWindow(
+		session: string,
+		direction: "h" | "v",
+	): Promise<Result<void, string>>;
 	sendKeys(target: string, keys: string): Promise<Result<void, string>>;
 	sendText(target: string, text: string): Promise<Result<void, string>>;
 	capturePane(target: string): Promise<Result<string, string>>;
@@ -49,7 +52,10 @@ export class Tmux implements TmuxPort {
 		return ok(undefined);
 	}
 
-	async splitWindow(session: string, direction: "h" | "v"): Promise<Result<void, string>> {
+	async splitWindow(
+		session: string,
+		direction: "h" | "v",
+	): Promise<Result<void, string>> {
 		const flag = direction === "h" ? "-h" : "-v";
 		const result = await this.run(["split-window", flag, "-t", session]);
 		if (!result.ok) return result;
@@ -73,10 +79,13 @@ export class Tmux implements TmuxPort {
 	}
 
 	async capturePane(target: string): Promise<Result<string, string>> {
-		return this.run(["capture-pane", "-t", target, "-p"]);
+		return await this.run(["capture-pane", "-t", target, "-p"]);
 	}
 
-	async selectLayout(session: string, layout: string): Promise<Result<void, string>> {
+	async selectLayout(
+		session: string,
+		layout: string,
+	): Promise<Result<void, string>> {
 		const result = await this.run(["select-layout", "-t", session, layout]);
 		if (!result.ok) return result;
 		return ok(undefined);

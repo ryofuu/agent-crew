@@ -74,8 +74,8 @@ describe("WorkflowEngine", () => {
 				expect(state.value.status).toBe("running");
 				expect(state.value.goal).toBe("Build something");
 				expect(state.value.cycleCount).toBe(1);
-				expect(state.value.stages[0].status).toBe("active");
-				expect(state.value.stages[1].status).toBe("pending");
+				expect(state.value.stages[0]?.status).toBe("active");
+				expect(state.value.stages[1]?.status).toBe("pending");
 			}
 		});
 
@@ -97,7 +97,7 @@ describe("WorkflowEngine", () => {
 			const state = await engine.getState();
 			expect(state.ok).toBe(true);
 			if (state.ok) {
-				expect(state.value.stages[0].status).toBe("waiting_gate");
+				expect(state.value.stages[0]?.status).toBe("waiting_gate");
 			}
 		});
 	});
@@ -111,8 +111,8 @@ describe("WorkflowEngine", () => {
 			const state = await engine.getState();
 			if (state.ok) {
 				expect(state.value.currentStageIndex).toBe(1);
-				expect(state.value.stages[0].status).toBe("completed");
-				expect(state.value.stages[1].status).toBe("active");
+				expect(state.value.stages[0]?.status).toBe("completed");
+				expect(state.value.stages[1]?.status).toBe("active");
 			}
 		});
 
@@ -144,7 +144,7 @@ describe("WorkflowEngine", () => {
 
 			const state = await engine.getState();
 			if (state.ok) {
-				expect(state.value.stages[0].status).toBe("active");
+				expect(state.value.stages[0]?.status).toBe("active");
 			}
 		});
 
@@ -194,7 +194,7 @@ describe("WorkflowEngine", () => {
 			if (state.ok) {
 				expect(state.value.cycleCount).toBe(2);
 				expect(state.value.currentStageIndex).toBe(0);
-				expect(state.value.stages[0].status).toBe("waiting_gate");
+				expect(state.value.stages[0]?.status).toBe("waiting_gate");
 			}
 		});
 

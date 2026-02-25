@@ -17,17 +17,50 @@
 		"rules": {
 			"recommended": true,
 			"suspicious": {
-				"noExplicitAny": "warn"
+				"noExplicitAny": "error",
+				"noConfusingVoidType": "error",
+				"noEmptyBlockStatements": "error",
+				"noMisleadingCharacterClass": "error",
+				"noAssignInExpressions": "error",
+				"useAwait": "error"
 			},
 			"style": {
-				"noNonNullAssertion": "warn"
+				"noNonNullAssertion": "error",
+				"noDefaultExport": "error",
+				"noEnum": "error",
+				"noParameterAssign": "error",
+				"noUselessElse": "error",
+				"useConsistentArrayType": "error",
+				"useForOf": "error",
+				"useFragmentSyntax": "error",
+				"useImportType": "error",
+				"useShorthandAssign": "error",
+				"useExplicitLengthCheck": "error"
+			},
+			"complexity": {
+				"noExcessiveCognitiveComplexity": "error",
+				"noForEach": "error",
+				"useFlatMap": "error",
+				"useSimplifiedLogicExpression": "error"
+			},
+			"correctness": {
+				"noUnusedImports": "error",
+				"noUnusedVariables": "error",
+				"noUndeclaredVariables": "error",
+				"useExhaustiveDependencies": "error",
+				"useHookAtTopLevel": "error"
+			},
+			"performance": {
+				"noAccumulatingSpread": "error",
+				"noDelete": "error"
 			}
 		}
 	},
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"
-		}
+		},
+		"globals": ["Bun"]
 	},
 	"assist": {
 		"enabled": true,

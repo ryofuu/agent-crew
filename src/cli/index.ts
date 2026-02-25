@@ -9,7 +9,10 @@ import { stopCommand } from "./commands/stop.js";
 export function createCLI(): Command {
 	const program = new Command();
 
-	program.name("crew").description("AI agent crew orchestration CLI").version("0.1.0");
+	program
+		.name("crew")
+		.description("AI agent crew orchestration CLI")
+		.version("0.1.0");
 
 	program
 		.command("init")
@@ -24,7 +27,10 @@ export function createCLI(): Command {
 		.argument("<goal>", "Goal description")
 		.action(startCommand);
 
-	program.command("status").description("Show workflow status").action(statusCommand);
+	program
+		.command("status")
+		.description("Show workflow status")
+		.action(statusCommand);
 
 	program
 		.command("stop")
@@ -32,9 +38,15 @@ export function createCLI(): Command {
 		.option("--force", "Force stop without confirmation")
 		.action(stopCommand);
 
-	program.command("list").description("List available workflows").action(listCommand);
+	program
+		.command("list")
+		.description("List available workflows")
+		.action(listCommand);
 
-	program.command("doctor").description("Check prerequisites").action(doctorCommand);
+	program
+		.command("doctor")
+		.description("Check prerequisites")
+		.action(doctorCommand);
 
 	return program;
 }

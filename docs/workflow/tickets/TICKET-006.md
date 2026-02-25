@@ -137,3 +137,41 @@ workflow:
 ## Blocker
 
 ## Review Feedback
+
+### Round 1 (2026-02-25T12:00:00+09:00)
+
+**Verdict**: CHANGES_REQUESTED
+
+#### Code Quality
+- [high] CLI コマンドのテストが不足。`cli.test.ts` はコマンド名の登録確認のみ（2 tests）。`init`, `start`, `status`, `stop`, `list`, `doctor` の各コマンドロジックのテストがない
+- [medium] `src/cli/commands/start.ts:8` — `startCommand` の認知的複雑度 20（Biome 上限 15 超過）。agent spawning と polling loop を分離すべき
+- [medium] `src/cli/commands/start.ts:75-105` — `while (true)` ループに SIGINT/SIGTERM ハンドリングなし。プロセス kill 時に tmux セッション/エージェントが残存
+- [low] `src/cli/commands/stop.ts:7` — `_options: { force?: boolean }` パラメータが未使用。`--force` フラグが効果なし
+- [low] `src/cli/commands/init.ts:9` — `fs.existsSync` の同期呼び出し。他のコードは全て async API を使用
+
+#### Security
+- [high] `src/cli/commands/start.ts:47-59` — `config.defaults.planner_model as ModelId` の unsafe cast（3箇所）。Config の Zod スキーマで `z.string()` → `z.enum([...ModelId values])` に変更し、ランタイムバリデーションを行うこと
+- [medium] `src/cli/commands/init.ts:21-28` — `_counter.txt`, `state.json`, `.gitignore` が atomic write でない
+- [medium] `src/cli/commands/doctor.ts:5-8` — `minVersion` フィールドが定義されているが未使用。バージョン要件チェックが行われていない
+
+#### Architecture
+- [high] `src/cli/commands/stop.ts:23-25` — `new AgentRunner(tmux, crewDir, cwd)` で新規インスタンスを作成するが、`sessionName` が空のため `destroySession()` が即 `ok(undefined)` を返す。**crew stop が実質的に動作しない**。セッション名の永続化が必要
+- [medium] `src/cli/commands/start.ts:42-69` — 3エージェントのレイアウトがハードコード。ワークフロー定義の `stages` から動的にエージェント構成を導出すべき
+- [medium] `src/cli/commands/list.ts:6-13` — ワークフロー検索パスが `WorkflowEngine` と重複。共通ユーティリティに抽出すべき
+- [medium] CLI コマンドが `process.exit()` でエラー処理。Result パターンに統一し、CLI エントリポイントで exit code を制御すべき
+
+#### Required Changes
+1. [src/cli/commands/start.ts:47-59] `as ModelId` を削除し、Config Zod スキーマで ModelId を `z.enum()` でバリデーション
+2. [src/cli/commands/stop.ts] セッション名を `state.json` から復元し、`destroySession()` が実際に動作するよう修正
+3. [tests/cli/] `init`, `start`, `stop`, `status`, `list`, `doctor` の各コマンドのテストを追加（少なくとも正常系・異常系各1ケース）
+4. [src/cli/commands/start.ts] SIGINT/SIGTERM ハンドラを追加し、終了時に tmux セッションをクリーンアップ
+
+## Re-implementation Notes (Round 2)
+
+1. `config.ts` — `ModelIdSchema = z.enum(["claude-opus-4-6", "claude-sonnet-4-6", "codex-1", "codex-mini-latest"])` を導入、`z.string()` → `ModelIdSchema` に置換。`as ModelId` キャスト不要に
+2. `start.ts` — `as ModelId` を全箇所削除。Config の型推論で ModelId が確定
+3. `start.ts` — `AbortController` + `SIGINT/SIGTERM` ハンドラ追加。シグナル受信時に `destroySession()` + `engine.stop()` で cleanup
+4. `start.ts` — `pollLoop` に `AbortSignal` を渡し、abort 時にループ終了
+5. `stop.ts` — `runner.setSessionName(\`crew-${config.project_name}\`)` でセッション名を config から復元し `destroySession()` が動作するよう修正
+6. `AgentRunner` に `getSessionName()`, `setSessionName()` を追加
+7. `tests/cli/commands.test.ts` — init, config validation, stop, doctor, list のテスト追加（7 tests）

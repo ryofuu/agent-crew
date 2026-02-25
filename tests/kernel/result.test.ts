@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { err, isErr, isOk, ok } from "../../src/kernel/result.js";
 import type { Result } from "../../src/kernel/result.js";
+import { err, isErr, isOk, ok } from "../../src/kernel/result.js";
 
 describe("Result", () => {
 	test("ok() creates a success result", () => {

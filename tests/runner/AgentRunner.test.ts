@@ -11,49 +11,52 @@ class MockTmux implements TmuxPort {
 	calls: { method: string; args: unknown[] }[] = [];
 	captureOutput = "$ ";
 
-	async run(args: string[]): Promise<Result<string, string>> {
+	run(args: string[]): Promise<Result<string, string>> {
 		this.calls.push({ method: "run", args });
-		return ok("");
+		return Promise.resolve(ok(""));
 	}
 
-	async hasSession(_name: string): Promise<boolean> {
+	hasSession(_name: string): Promise<boolean> {
 		this.calls.push({ method: "hasSession", args: [_name] });
-		return false;
+		return Promise.resolve(false);
 	}
 
-	async newSession(name: string): Promise<Result<void, string>> {
+	newSession(name: string): Promise<Result<void, string>> {
 		this.calls.push({ method: "newSession", args: [name] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 
-	async killSession(name: string): Promise<Result<void, string>> {
+	killSession(name: string): Promise<Result<void, string>> {
 		this.calls.push({ method: "killSession", args: [name] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 
-	async splitWindow(session: string, direction: "h" | "v"): Promise<Result<void, string>> {
+	splitWindow(
+		session: string,
+		direction: "h" | "v",
+	): Promise<Result<void, string>> {
 		this.calls.push({ method: "splitWindow", args: [session, direction] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 
-	async sendKeys(target: string, keys: string): Promise<Result<void, string>> {
+	sendKeys(target: string, keys: string): Promise<Result<void, string>> {
 		this.calls.push({ method: "sendKeys", args: [target, keys] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 
-	async sendText(target: string, text: string): Promise<Result<void, string>> {
+	sendText(target: string, text: string): Promise<Result<void, string>> {
 		this.calls.push({ method: "sendText", args: [target, text] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 
-	async capturePane(target: string): Promise<Result<string, string>> {
+	capturePane(target: string): Promise<Result<string, string>> {
 		this.calls.push({ method: "capturePane", args: [target] });
-		return ok(this.captureOutput);
+		return Promise.resolve(ok(this.captureOutput));
 	}
 
-	async selectLayout(session: string, layout: string): Promise<Result<void, string>> {
+	selectLayout(session: string, layout: string): Promise<Result<void, string>> {
 		this.calls.push({ method: "selectLayout", args: [session, layout] });
-		return ok(undefined);
+		return Promise.resolve(ok(undefined));
 	}
 }
 
@@ -62,7 +65,9 @@ let mockTmux: MockTmux;
 let runner: AgentRunner;
 
 beforeEach(async () => {
-	tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "crew-runner-test-"));
+	tmpDir = await fs.promises.mkdtemp(
+		path.join(os.tmpdir(), "crew-runner-test-"),
+	);
 	mockTmux = new MockTmux();
 	runner = new AgentRunner(mockTmux, tmpDir, "/tmp/project");
 });
@@ -80,9 +85,9 @@ describe("AgentRunner", () => {
 		});
 
 		test("returns error if session already exists", async () => {
-			mockTmux.hasSession = async () => {
+			mockTmux.hasSession = () => {
 				mockTmux.calls.push({ method: "hasSession", args: [] });
-				return true;
+				return Promise.resolve(true);
 			};
 			const result = await runner.createSession("myproject");
 			expect(result.ok).toBe(false);
@@ -92,7 +97,12 @@ describe("AgentRunner", () => {
 	describe("spawn", () => {
 		test("spawns a claude-code agent", async () => {
 			await runner.createSession("myproject");
-			const result = await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			const result = await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			expect(result.ok).toBe(true);
 
 			const sendCalls = mockTmux.calls.filter((c) => c.method === "sendText");
@@ -101,14 +111,29 @@ describe("AgentRunner", () => {
 
 		test("spawns a codex agent", async () => {
 			await runner.createSession("myproject");
-			const result = await runner.spawn("implementer", "implementer", "codex", "codex-1");
+			const result = await runner.spawn(
+				"implementer",
+				"implementer",
+				"codex",
+				"codex-1",
+			);
 			expect(result.ok).toBe(true);
 		});
 
 		test("returns error for duplicate agent name", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
-			const result = await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+			const result = await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			expect(result.ok).toBe(false);
 		});
 	});
@@ -116,7 +141,12 @@ describe("AgentRunner", () => {
 	describe("stop", () => {
 		test("stops a running agent", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			const result = await runner.stop("planner");
 			expect(result.ok).toBe(true);
 		});
@@ -130,10 +160,18 @@ describe("AgentRunner", () => {
 	describe("sendNudge", () => {
 		test("sends nudge to agent pane", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 
 			mockTmux.calls = [];
-			const result = await runner.sendNudge("planner", "Please check task status");
+			const result = await runner.sendNudge(
+				"planner",
+				"Please check task status",
+			);
 			expect(result.ok).toBe(true);
 			expect(mockTmux.calls.some((c) => c.method === "sendText")).toBe(true);
 		});
@@ -142,7 +180,12 @@ describe("AgentRunner", () => {
 	describe("getStatus", () => {
 		test("detects idle status from shell prompt", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			mockTmux.captureOutput = "user@host ~ $ ";
 
 			const result = await runner.getStatus("planner");
@@ -152,7 +195,12 @@ describe("AgentRunner", () => {
 
 		test("detects active status", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			mockTmux.captureOutput = "Thinking about the task...";
 
 			const result = await runner.getStatus("planner");
@@ -167,9 +215,13 @@ describe("AgentRunner", () => {
 			const result = await runner.setupLayout(3);
 			expect(result.ok).toBe(true);
 
-			const splitCalls = mockTmux.calls.filter((c) => c.method === "splitWindow");
+			const splitCalls = mockTmux.calls.filter(
+				(c) => c.method === "splitWindow",
+			);
 			expect(splitCalls.length).toBe(2);
-			expect(mockTmux.calls.some((c) => c.method === "selectLayout")).toBe(true);
+			expect(mockTmux.calls.some((c) => c.method === "selectLayout")).toBe(
+				true,
+			);
 		});
 	});
 
@@ -187,7 +239,12 @@ describe("AgentRunner", () => {
 	describe("destroySession", () => {
 		test("destroys session and clears state", async () => {
 			await runner.createSession("myproject");
-			await runner.spawn("planner", "planner", "claude-code", "claude-opus-4-6");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
 			const result = await runner.destroySession();
 			expect(result.ok).toBe(true);
 		});

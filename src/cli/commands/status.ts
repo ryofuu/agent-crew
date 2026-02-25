@@ -18,7 +18,9 @@ export async function statusCommand(): Promise<void> {
 	console.log(
 		`Workflow: ${state.workflowName}  Status: ${state.status}  Cycle: ${state.cycleCount}`,
 	);
-	console.log(`Stage: ${currentStage?.name ?? "none"} (${currentStage?.status ?? "unknown"})`);
+	console.log(
+		`Stage: ${currentStage?.name ?? "none"} (${currentStage?.status ?? "unknown"})`,
+	);
 	console.log();
 
 	// Tasks
