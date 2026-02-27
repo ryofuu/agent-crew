@@ -8,6 +8,7 @@ export interface WorkflowEnginePort {
 	pause(): Promise<Result<void, string>>;
 	resume(): Promise<Result<void, string>>;
 	stop(): Promise<Result<void, string>>;
+	continueWorkflow(): Promise<Result<void, string>>;
 	getState(): Promise<Result<WorkflowState, string>>;
 	getCurrentStage(): Promise<Result<StageState | null, string>>;
 	canAdvance(): Promise<Result<boolean, string>>;

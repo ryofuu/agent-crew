@@ -11,14 +11,9 @@ import {
 	recordAllPids,
 	sendFirstPrompt,
 	spawnAgents,
-	writeRequestEntry,
 } from "./_shared.js";
 
-export async function startCommand(
-	workflowName: string,
-	goal: string,
-	options?: RunOptions,
-): Promise<void> {
+export async function continueCommand(options?: RunOptions): Promise<void> {
 	const cwd = process.cwd();
 	const crewDir = path.join(cwd, ".crew");
 
@@ -35,16 +30,20 @@ export async function startCommand(
 	const tmux = new Tmux();
 	const runner = new AgentRunner(tmux, crewDir, cwd);
 
-	const startResult = await engine.start(workflowName, goal);
-	if (!startResult.ok) {
-		console.error(`Error: ${startResult.error}`);
+	const continueResult = await engine.continueWorkflow();
+	if (!continueResult.ok) {
+		console.error(`Error: ${continueResult.error}`);
 		process.exit(1);
 	}
 
-	// Write goal to REQUEST.md
-	await writeRequestEntry(crewDir, goal, "");
+	const stateResult = await engine.getState();
+	if (!stateResult.ok) {
+		console.error(`Error: ${stateResult.error}`);
+		process.exit(1);
+	}
+	const state = stateResult.value;
 
-	const stageDefsResult = await engine.getStageDefinitions();
+	const stageDefsResult = engine.getStageDefinitions();
 	if (!stageDefsResult.ok) {
 		console.error(`Error: ${stageDefsResult.error}`);
 		process.exit(1);
@@ -72,7 +71,10 @@ export async function startCommand(
 	const logger = new CrewLogger(crewDir);
 	await logger.open();
 
-	logger.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
+	const currentStageIndex = state.currentStageIndex;
+	logger.log(
+		`Workflow '${state.workflowName}' continued from stage ${currentStageIndex + 1}/${stageDefs.length} (${stageDefs[currentStageIndex]?.name ?? "unknown"})`,
+	);
 	logger.log(`tmux session: crew-${projectName}`);
 	logger.log(`Log file: ${logger.getPath()}`);
 
@@ -80,7 +82,7 @@ export async function startCommand(
 		engine,
 		runner,
 		stageDefs,
-		workflowName,
+		state.workflowName,
 		crewDir,
 	);
 
@@ -108,7 +110,7 @@ export async function startCommand(
 		runner,
 		crewDir,
 		stageDefs,
-		workflowName,
+		state.workflowName,
 		promptedStageIndex,
 		pollInterval,
 		nudgeIntervalMs,

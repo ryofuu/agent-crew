@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { continueCommand } from "./commands/continue.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { initCommand } from "./commands/init.js";
 import { listCommand } from "./commands/list.js";
@@ -38,6 +39,21 @@ export function createCLI(): Command {
 			"Keep tmux session alive after workflow completes",
 		)
 		.action(startCommand);
+
+	program
+		.command("continue")
+		.description("Continue a previously stopped workflow")
+		.option("--auto-approve", "Run all agents in auto-approve mode")
+		.option(
+			"--nudge-interval <seconds>",
+			"Override nudge interval in seconds",
+			Number.parseInt,
+		)
+		.option(
+			"--keep-session",
+			"Keep tmux session alive after workflow completes",
+		)
+		.action(continueCommand);
 
 	program
 		.command("status")

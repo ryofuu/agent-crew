@@ -5,6 +5,7 @@ export const WorkflowErrors = {
 	GATE_PENDING: "GATE_PENDING",
 	ALREADY_RUNNING: "ALREADY_RUNNING",
 	NOT_RUNNING: "NOT_RUNNING",
+	WORKFLOW_COMPLETED: "WORKFLOW_COMPLETED",
 } as const;
 
 export const AgentErrors = {

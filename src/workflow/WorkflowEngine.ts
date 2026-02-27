@@ -134,6 +134,64 @@ export class WorkflowEngine implements WorkflowEnginePort {
 		return writeState(this.crewDir, state);
 	}
 
+	async continueWorkflow(): Promise<Result<void, string>> {
+		const stateResult = await readState(this.crewDir);
+		if (!stateResult.ok) return stateResult;
+		const state = stateResult.value;
+
+		if (state.status === "running") {
+			return err(WorkflowErrors.ALREADY_RUNNING);
+		}
+
+		const allCompleted = state.stages.every((s) => s.status === "completed");
+		if (allCompleted) {
+			return err(WorkflowErrors.WORKFLOW_COMPLETED);
+		}
+
+		const defResult = await this.loadDefinition(state.workflowName);
+		if (!defResult.ok) return defResult;
+		this.definition = defResult.value;
+
+		state.status = "running";
+		this.activateResumeStage(state);
+
+		state.updatedAt = new Date().toISOString();
+		return writeState(this.crewDir, state);
+	}
+
+	/** Activate the appropriate stage for workflow continuation. */
+	private activateResumeStage(state: WorkflowState): void {
+		if (!this.definition) return;
+		const currentStage = state.stages[state.currentStageIndex];
+		if (!currentStage) return;
+
+		if (currentStage.status === "completed") {
+			this.activateNextPending(state);
+		} else if (currentStage.status === "pending") {
+			this.activateStageAt(state, state.currentStageIndex);
+		}
+		// If already "active" or "waiting_gate", keep as-is
+	}
+
+	private activateNextPending(state: WorkflowState): void {
+		for (let i = state.currentStageIndex + 1; i < state.stages.length; i++) {
+			const s = state.stages[i];
+			if (s && s.status !== "completed") {
+				state.currentStageIndex = i;
+				this.activateStageAt(state, i);
+				break;
+			}
+		}
+	}
+
+	private activateStageAt(state: WorkflowState, index: number): void {
+		if (!this.definition) return;
+		const stage = state.stages[index];
+		const def = this.definition.stages[index];
+		if (!(stage && def)) return;
+		stage.status = def.human_gate ? "waiting_gate" : "active";
+	}
+
 	async stop(): Promise<Result<void, string>> {
 		const stateResult = await readState(this.crewDir);
 		if (!stateResult.ok) return stateResult;
