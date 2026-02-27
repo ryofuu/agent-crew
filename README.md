@@ -69,6 +69,7 @@ crew stop
 | `crew status` | Show workflow state, tasks, and agent status |
 | `crew stop [--force]` | Stop all agents and destroy tmux session |
 | `crew list` | List available workflow definitions |
+| `crew restart <agent>` | Restart a specific agent (kill + re-launch CLI) |
 | `crew doctor` | Check that all prerequisites are installed |
 
 ## How It Works
@@ -132,6 +133,34 @@ Improve UX on API errors.
 - `## [done] [YYYY-MM-DD HH:MM] Title` — Completed request (excluded from agent prompts)
 
 When you run `crew start`, the goal is automatically appended to REQUEST.md with a timestamp. You can manually edit this file at any time to add new requests or mark existing ones as done.
+
+### Process Recovery
+
+agent-crew tracks each agent's process (PID) and automatically restarts crashed agents.
+
+**Auto-recovery (default):** The poll loop detects dead agent processes and automatically respawns them, re-sending the current stage's prompt. No user action needed.
+
+**Manual recovery:**
+
+```bash
+# Check agent health
+crew status
+# Output:
+#   planner        pane:0  pid:12367  alive
+#   implementer    pane:1  pid:12389  dead  respawns:1
+
+# Manually restart a specific agent
+crew restart implementer
+```
+
+Agent process information is persisted in `.crew/agents.json`, so `crew status` can display PID and health even from a separate terminal.
+
+Configure maximum respawn attempts in `~/.crew/config.yaml`:
+
+```yaml
+agent:
+  max_respawns: 3   # default: 3, give up after this many respawns
+```
 
 ### Task File Format
 
@@ -219,6 +248,7 @@ tmux:
 agent:
   nudge_interval_seconds: 300  # idle detection interval (override with --nudge-interval)
   max_escalation_phase: 3      # max nudge attempts per stage
+  max_respawns: 3              # max auto-respawn attempts per agent
   auto_approve: false
 workflow:
   poll_interval_seconds: 5

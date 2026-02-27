@@ -11,6 +11,7 @@ export type {
 	CliType,
 	ModelId,
 	Priority,
+	ProcessHealth,
 	TaskStatus,
 	WorkflowStatus,
 } from "./types.js";

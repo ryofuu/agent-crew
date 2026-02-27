@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { doctorCommand } from "./commands/doctor.js";
 import { initCommand } from "./commands/init.js";
 import { listCommand } from "./commands/list.js";
+import { restartCommand } from "./commands/restart.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
@@ -52,6 +53,12 @@ export function createCLI(): Command {
 		.command("list")
 		.description("List available workflows")
 		.action(listCommand);
+
+	program
+		.command("restart")
+		.description("Restart a specific agent")
+		.argument("<agent>", "Agent name to restart")
+		.action(restartCommand);
 
 	program
 		.command("doctor")

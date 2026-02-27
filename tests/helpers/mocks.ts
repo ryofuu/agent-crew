@@ -13,5 +13,6 @@ export function createMockTmux(): TmuxPort {
 		sendPromptFile: () => Promise.resolve(ok(undefined)),
 		capturePane: () => Promise.resolve(ok("")),
 		selectLayout: () => Promise.resolve(ok(undefined)),
+		getPanePid: () => Promise.resolve(ok(1000)),
 	};
 }

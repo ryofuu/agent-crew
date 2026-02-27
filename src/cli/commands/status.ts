@@ -1,10 +1,30 @@
 import * as path from "node:path";
-import { Tmux } from "../../runner/index.js";
+import { AgentRegistry, ProcessProbe, Tmux } from "../../runner/index.js";
 import { TaskStore } from "../../store/index.js";
 import type { WorkflowState } from "../../workflow/index.js";
 import { readState } from "../../workflow/index.js";
 
-async function printAgentStatus(state: WorkflowState): Promise<void> {
+async function printRegistryAgents(crewDir: string): Promise<boolean> {
+	const registry = new AgentRegistry();
+	const registryResult = await registry.load(crewDir);
+	if (!registryResult.ok) return false;
+
+	const probe = new ProcessProbe();
+	console.log("Agents:");
+	for (const agent of registryResult.value.agents) {
+		const pid = agent.agentPid ?? agent.shellPid;
+		const health = pid && probe.isAlive(pid) ? "alive" : "dead";
+		const respawnInfo =
+			agent.respawnCount > 0 ? `  respawns:${agent.respawnCount}` : "";
+		const paneIdx = agent.pane.split(".").pop() ?? "?";
+		console.log(
+			`  ${agent.name.padEnd(14)} pane:${paneIdx}  pid:${pid ?? "?"}  ${health}${respawnInfo}`,
+		);
+	}
+	return true;
+}
+
+async function printTmuxPaneAgents(state: WorkflowState): Promise<void> {
 	const cwd = process.cwd();
 	const projectName = path.basename(cwd);
 	const sessionName = `crew-${projectName}`;
@@ -36,6 +56,16 @@ async function printAgentStatus(state: WorkflowState): Promise<void> {
 		const parts = panes[i]?.split(":") ?? [];
 		const pid = parts[1] ?? "?";
 		console.log(`  ${name.padEnd(14)} pane:${i}  pid:${pid}  active`);
+	}
+}
+
+async function printAgentStatus(
+	state: WorkflowState,
+	crewDir: string,
+): Promise<void> {
+	const printed = await printRegistryAgents(crewDir);
+	if (!printed) {
+		await printTmuxPaneAgents(state);
 	}
 }
 
@@ -76,5 +106,5 @@ export async function statusCommand(): Promise<void> {
 
 	// Agents
 	console.log();
-	await printAgentStatus(state);
+	await printAgentStatus(state, crewDir);
 }

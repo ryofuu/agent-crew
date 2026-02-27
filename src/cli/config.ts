@@ -32,6 +32,7 @@ const ConfigSchema = z.object({
 			nudge_interval_seconds: z.number().default(300),
 			max_escalation_phase: z.number().default(3),
 			auto_approve: z.boolean().default(false),
+			max_respawns: z.number().default(3),
 		})
 		.default({}),
 	workflow: z

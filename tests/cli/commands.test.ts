@@ -112,6 +112,7 @@ describe("stop command", () => {
 			capturePane: () => Promise.resolve({ ok: true as const, value: "" }),
 			selectLayout: () =>
 				Promise.resolve({ ok: true as const, value: undefined }),
+			getPanePid: () => Promise.resolve({ ok: true as const, value: 1000 }),
 		};
 
 		const runner = new AgentRunner(mockTmux, tmpDir, tmpDir);

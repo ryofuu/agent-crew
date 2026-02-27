@@ -5,11 +5,26 @@ import * as path from "node:path";
 import type { Result } from "../../src/kernel/index.js";
 import { ok } from "../../src/kernel/index.js";
 import { AgentRunner } from "../../src/runner/AgentRunner.js";
+import type { ProcessProbePort } from "../../src/runner/ProcessProbe.js";
 import type { TmuxPort } from "../../src/runner/tmux.js";
+
+class MockProcessProbe implements ProcessProbePort {
+	childPids: number[] = [];
+	alivePids: Set<number> = new Set();
+
+	getChildPids(_parentPid: number): Promise<Result<number[], string>> {
+		return Promise.resolve(ok(this.childPids));
+	}
+
+	isAlive(pid: number): boolean {
+		return this.alivePids.has(pid);
+	}
+}
 
 class MockTmux implements TmuxPort {
 	calls: { method: string; args: unknown[] }[] = [];
 	captureOutput = "$ ";
+	panePid = 1000;
 
 	run(args: string[]): Promise<Result<string, string>> {
 		this.calls.push({ method: "run", args });
@@ -66,10 +81,16 @@ class MockTmux implements TmuxPort {
 		this.calls.push({ method: "selectLayout", args: [session, layout] });
 		return Promise.resolve(ok(undefined));
 	}
+
+	getPanePid(target: string): Promise<Result<number, string>> {
+		this.calls.push({ method: "getPanePid", args: [target] });
+		return Promise.resolve(ok(this.panePid));
+	}
 }
 
 let tmpDir: string;
 let mockTmux: MockTmux;
+let mockProbe: MockProcessProbe;
 let runner: AgentRunner;
 
 beforeEach(async () => {
@@ -77,7 +98,8 @@ beforeEach(async () => {
 		path.join(os.tmpdir(), "crew-runner-test-"),
 	);
 	mockTmux = new MockTmux();
-	runner = new AgentRunner(mockTmux, tmpDir, "/tmp/project");
+	mockProbe = new MockProcessProbe();
+	runner = new AgentRunner(mockTmux, tmpDir, "/tmp/project", mockProbe);
 });
 
 afterEach(async () => {
@@ -384,6 +406,183 @@ describe("AgentRunner", () => {
 			);
 			const result = await runner.destroySession();
 			expect(result.ok).toBe(true);
+		});
+	});
+
+	describe("recordPid", () => {
+		test("records shell and agent PIDs", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [5001];
+
+			const result = await runner.recordPid("planner");
+			expect(result.ok).toBe(true);
+
+			const info = runner.getAgentInfo("planner");
+			expect(info?.shellPid).toBe(5000);
+			expect(info?.agentPid).toBe(5001);
+		});
+
+		test("records shell PID even with no children", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [];
+
+			const result = await runner.recordPid("planner");
+			expect(result.ok).toBe(true);
+
+			const info = runner.getAgentInfo("planner");
+			expect(info?.shellPid).toBe(5000);
+			expect(info?.agentPid).toBeUndefined();
+		});
+
+		test("returns error for nonexistent agent", async () => {
+			const result = await runner.recordPid("ghost");
+			expect(result.ok).toBe(false);
+		});
+	});
+
+	describe("checkHealth", () => {
+		test("returns alive when both PIDs alive", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [5001];
+			await runner.recordPid("planner");
+
+			mockProbe.alivePids = new Set([5000, 5001]);
+			const result = await runner.checkHealth("planner");
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.value).toBe("alive");
+		});
+
+		test("returns dead when shell PID is dead", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [5001];
+			await runner.recordPid("planner");
+
+			mockProbe.alivePids = new Set(); // nothing alive
+			const result = await runner.checkHealth("planner");
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.value).toBe("dead");
+		});
+
+		test("returns dead when agent PID dead and no children", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [5001];
+			await runner.recordPid("planner");
+
+			mockProbe.alivePids = new Set([5000]); // shell alive, agent dead
+			mockProbe.childPids = []; // no child processes left
+			const result = await runner.checkHealth("planner");
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.value).toBe("dead");
+		});
+
+		test("returns unknown when no PID recorded", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			// Don't call recordPid
+			const result = await runner.checkHealth("planner");
+			expect(result.ok).toBe(true);
+			if (result.ok) expect(result.value).toBe("unknown");
+		});
+	});
+
+	describe("respawn", () => {
+		test("respawns an agent and increments count", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.calls = [];
+			const result = await runner.respawn("planner");
+			expect(result.ok).toBe(true);
+
+			const info = runner.getAgentInfo("planner");
+			expect(info?.respawnCount).toBe(1);
+
+			// Should have sent C-c and then sendText for the CLI command
+			expect(mockTmux.calls.some((c) => c.method === "sendKeys")).toBe(true);
+			expect(mockTmux.calls.some((c) => c.method === "sendText")).toBe(true);
+		});
+
+		test("returns error for nonexistent agent", async () => {
+			const result = await runner.respawn("ghost");
+			expect(result.ok).toBe(false);
+		});
+	});
+
+	describe("persistRegistry", () => {
+		test("writes agents.json", async () => {
+			await runner.createSession("myproject");
+			await runner.spawn(
+				"planner",
+				"planner",
+				"claude-code",
+				"claude-opus-4-6",
+			);
+
+			mockTmux.panePid = 5000;
+			mockProbe.childPids = [5001];
+			await runner.recordPid("planner");
+
+			const result = await runner.persistRegistry();
+			expect(result.ok).toBe(true);
+
+			const filePath = path.join(tmpDir, "agents.json");
+			const content = JSON.parse(await fs.promises.readFile(filePath, "utf-8"));
+			expect(content.sessionName).toBe("crew-myproject");
+			expect(content.agents.length).toBe(1);
+			expect(content.agents[0].name).toBe("planner");
+			expect(content.agents[0].shellPid).toBe(5000);
+			expect(content.agents[0].agentPid).toBe(5001);
 		});
 	});
 });

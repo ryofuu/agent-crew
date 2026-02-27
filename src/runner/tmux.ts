@@ -18,6 +18,7 @@ export interface TmuxPort {
 	): Promise<Result<void, string>>;
 	capturePane(target: string): Promise<Result<string, string>>;
 	selectLayout(session: string, layout: string): Promise<Result<void, string>>;
+	getPanePid(target: string): Promise<Result<number, string>>;
 }
 
 export class Tmux implements TmuxPort {
@@ -107,5 +108,23 @@ export class Tmux implements TmuxPort {
 		const result = await this.run(["select-layout", "-t", session, layout]);
 		if (!result.ok) return result;
 		return ok(undefined);
+	}
+
+	async getPanePid(target: string): Promise<Result<number, string>> {
+		const result = await this.run([
+			"display-message",
+			"-t",
+			target,
+			"-p",
+			"#{pane_pid}",
+		]);
+		if (!result.ok) return result;
+		const pid = Number.parseInt(result.value, 10);
+		if (Number.isNaN(pid)) {
+			return err(
+				`${AgentErrors.TMUX_ERROR}: invalid pane pid: ${result.value}`,
+			);
+		}
+		return ok(pid);
 	}
 }

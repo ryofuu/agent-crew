@@ -27,3 +27,5 @@ export type ModelId =
 export type CliType = "claude-code" | "codex";
 
 export type Priority = "critical" | "high" | "medium" | "low";
+
+export type ProcessHealth = "alive" | "dead" | "unknown";

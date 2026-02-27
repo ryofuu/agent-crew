@@ -206,6 +206,7 @@ interface PollContext {
 	promptedStageIndex: number;
 	nudgeIntervalMs: number;
 	maxNudges: number;
+	maxRespawns: number;
 	lastActiveAt: number;
 	nudgeCount: number;
 }
@@ -325,6 +326,56 @@ async function maybeNudgeAgent(ctx: PollContext): Promise<void> {
 	}
 }
 
+const RESPAWN_READY_TIMEOUT_MS = 15_000;
+
+async function maybeRecoverAgent(ctx: PollContext): Promise<void> {
+	const stateResult = await ctx.engine.getState();
+	if (!stateResult.ok || stateResult.value.status !== "running") return;
+
+	const idx = stateResult.value.currentStageIndex;
+	const stageDef = ctx.stages[idx];
+	if (!stageDef) return;
+
+	const healthResult = await ctx.runner.checkHealth(stageDef.role);
+	if (!healthResult.ok || healthResult.value !== "dead") return;
+
+	const agentInfo = ctx.runner.getAgentInfo(stageDef.role);
+	if (agentInfo && agentInfo.respawnCount >= ctx.maxRespawns) {
+		console.error(
+			`Agent '${stageDef.role}' died but max respawns (${ctx.maxRespawns}) reached. Giving up.`,
+		);
+		return;
+	}
+
+	console.log(`Agent '${stageDef.role}' detected dead. Respawning...`);
+	const respawnResult = await ctx.runner.respawn(stageDef.role);
+	if (!respawnResult.ok) {
+		console.error(
+			`Respawn failed for '${stageDef.role}': ${respawnResult.error}`,
+		);
+		return;
+	}
+
+	await ctx.runner.waitForReady(stageDef.role, RESPAWN_READY_TIMEOUT_MS);
+	await ctx.runner.recordPid(stageDef.role);
+	await ctx.runner.persistRegistry();
+
+	// Re-send current stage prompt
+	await promptAgent(
+		ctx.runner,
+		stageDef.role,
+		stageDef.role,
+		ctx.workflowName,
+		stageDef.context_reset,
+		ctx.crewDir,
+	);
+
+	// Reset nudge counter
+	ctx.lastActiveAt = Date.now();
+	ctx.nudgeCount = 0;
+	console.log(`Agent '${stageDef.role}' respawned and prompted.`);
+}
+
 async function pollLoop(
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
@@ -335,6 +386,7 @@ async function pollLoop(
 	pollInterval: number,
 	nudgeIntervalMs: number,
 	maxNudges: number,
+	maxRespawns: number,
 	signal: AbortSignal,
 ): Promise<void> {
 	const ctx: PollContext = {
@@ -346,6 +398,7 @@ async function pollLoop(
 		promptedStageIndex,
 		nudgeIntervalMs,
 		maxNudges,
+		maxRespawns,
 		lastActiveAt: Date.now(),
 		nudgeCount: 0,
 	};
@@ -373,6 +426,7 @@ async function pollLoop(
 		const action = await tryAdvanceStage(ctx);
 		if (action === "break") break;
 
+		await maybeRecoverAgent(ctx);
 		await maybeNudgeAgent(ctx);
 
 		await Bun.sleep(pollInterval);
@@ -406,6 +460,16 @@ async function spawnAgents(
 			console.error(`Error spawning ${agent.name}: ${result.error}`);
 		}
 	}
+}
+
+async function recordAllPids(
+	runner: AgentRunnerPort,
+	agents: AgentEntry[],
+): Promise<void> {
+	for (const agent of agents) {
+		await runner.recordPid(agent.name);
+	}
+	await runner.persistRegistry();
 }
 
 async function sendFirstPrompt(
@@ -486,6 +550,10 @@ export async function startCommand(
 	const autoApprove = options?.autoApprove || config.agent.auto_approve;
 	await spawnAgents(runner, agents, autoApprove);
 
+	// Wait briefly for CLIs to start, then record PIDs
+	await Bun.sleep(2000);
+	await recordAllPids(runner, agents);
+
 	console.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
 	console.log(`tmux session: crew-${projectName}`);
 
@@ -513,6 +581,7 @@ export async function startCommand(
 		options?.nudgeInterval ?? config.agent.nudge_interval_seconds;
 	const nudgeIntervalMs = nudgeIntervalSeconds * 1000;
 	const maxNudges = config.agent.max_escalation_phase;
+	const maxRespawns = config.agent.max_respawns;
 	await pollLoop(
 		engine,
 		runner,
@@ -523,6 +592,7 @@ export async function startCommand(
 		pollInterval,
 		nudgeIntervalMs,
 		maxNudges,
+		maxRespawns,
 		abortController.signal,
 	);
 

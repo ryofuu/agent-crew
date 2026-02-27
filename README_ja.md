@@ -69,6 +69,7 @@ crew stop
 | `crew status` | ワークフロー状態・タスク一覧・エージェント状態を表示 |
 | `crew stop [--force]` | 全エージェント停止、tmux セッション破棄 |
 | `crew list` | 利用可能なワークフロー定義を一覧表示 |
+| `crew restart <agent>` | 指定エージェントを再起動（kill + CLI 再起動）|
 | `crew doctor` | 前提条件のインストール状況を確認 |
 
 ## 動作の仕組み
@@ -133,6 +134,34 @@ API エラー時のユーザー体験を改善してください。
 - `## [done] [YYYY-MM-DD HH:MM] タイトル` — 完了した依頼（エージェントに渡されない）
 
 `crew start` 実行時にゴールがタイムスタンプ付きで REQUEST.md に自動追記されます。ワークフロー稼働中にこのファイルを手動編集して、新しい依頼の追加や既存依頼の完了マークが可能です。
+
+### プロセスリカバリ
+
+agent-crew は各エージェントのプロセス（PID）を追跡し、クラッシュしたエージェントを自動で再起動します。
+
+**自動リカバリ（デフォルト）:** poll loop がエージェントプロセスの死亡を検知し、自動でリスポーン + 現ステージのプロンプトを再送信します。ユーザー操作は不要です。
+
+**手動リカバリ:**
+
+```bash
+# エージェントの健全性を確認
+crew status
+# 出力例:
+#   planner        pane:0  pid:12367  alive
+#   implementer    pane:1  pid:12389  dead  respawns:1
+
+# 特定のエージェントを手動で再起動
+crew restart implementer
+```
+
+エージェントのプロセス情報は `.crew/agents.json` に永続化されるため、別ターミナルからでも `crew status` で PID と健全性を確認できます。
+
+最大リスポーン回数は `~/.crew/config.yaml` で設定可能:
+
+```yaml
+agent:
+  max_respawns: 3   # デフォルト: 3、この回数を超えたら諦める
+```
 
 ### タスクファイル形式
 
@@ -220,6 +249,7 @@ tmux:
 agent:
   nudge_interval_seconds: 300  # idle 検知間隔（--nudge-interval で上書き可）
   max_escalation_phase: 3      # ステージあたりの最大ナッジ回数
+  max_respawns: 3              # エージェントあたりの最大自動リスポーン回数
   auto_approve: false
 workflow:
   poll_interval_seconds: 5

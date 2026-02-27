@@ -1,11 +1,20 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentStatus, CliType, Result } from "../kernel/index.js";
+import type {
+	AgentStatus,
+	CliType,
+	ProcessHealth,
+	Result,
+} from "../kernel/index.js";
 import { AgentErrors, err, ok } from "../kernel/index.js";
+import type { AgentRecord, AgentRegistryData } from "./AgentRegistry.js";
+import { AgentRegistry } from "./AgentRegistry.js";
 import { ClaudeCodeAdapter } from "./adapters/ClaudeCodeAdapter.js";
 import { CodexAdapter } from "./adapters/CodexAdapter.js";
 import type { CliAdapter, StartCommandOptions } from "./adapters/types.js";
+import type { ProcessProbePort } from "./ProcessProbe.js";
+import { ProcessProbe } from "./ProcessProbe.js";
 import type { TmuxPort } from "./tmux.js";
 
 const AGENT_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -36,29 +45,48 @@ export interface AgentRunnerPort {
 	destroySession(): Promise<Result<void, string>>;
 	setupLayout(agentCount: number): Promise<Result<void, string>>;
 	getSessionName(): string;
+	recordPid(agentName: string): Promise<Result<void, string>>;
+	checkHealth(agentName: string): Promise<Result<ProcessHealth, string>>;
+	respawn(agentName: string): Promise<Result<void, string>>;
+	persistRegistry(): Promise<Result<void, string>>;
+	getAgentInfo(agentName: string): AgentInfo | undefined;
 }
 
-interface AgentInfo {
+export interface AgentInfo {
 	name: string;
 	role: string;
 	pane: string;
+	cliType: CliType;
 	adapter: CliAdapter;
 	model: string | undefined;
 	options?: StartCommandOptions;
+	shellPid?: number;
+	agentPid?: number;
+	spawnedAt?: string;
+	respawnCount: number;
 }
 
 export class AgentRunner implements AgentRunnerPort {
 	private readonly tmux: TmuxPort;
 	private readonly crewDir: string;
 	private readonly cwd: string;
+	private readonly probe: ProcessProbePort;
+	private readonly registry: AgentRegistry;
 	private sessionName = "";
 	private agents: Map<string, AgentInfo> = new Map();
 	private paneIndex = 0;
 
-	constructor(tmux: TmuxPort, crewDir: string, cwd: string) {
+	constructor(
+		tmux: TmuxPort,
+		crewDir: string,
+		cwd: string,
+		probe?: ProcessProbePort,
+	) {
 		this.tmux = tmux;
 		this.crewDir = crewDir;
 		this.cwd = cwd;
+		this.probe = probe ?? new ProcessProbe();
+		this.registry = new AgentRegistry();
 	}
 
 	private validateAgentName(name: string): Result<void, string> {
@@ -140,9 +168,12 @@ export class AgentRunner implements AgentRunnerPort {
 			name: agentName,
 			role,
 			pane,
+			cliType,
 			adapter,
 			model,
 			options,
+			spawnedAt: new Date().toISOString(),
+			respawnCount: 0,
 		});
 		this.paneIndex++;
 		return ok(undefined);
@@ -284,5 +315,102 @@ export class AgentRunner implements AgentRunnerPort {
 
 	setSessionName(name: string): void {
 		this.sessionName = name;
+	}
+
+	getAgentInfo(agentName: string): AgentInfo | undefined {
+		return this.agents.get(agentName);
+	}
+
+	async recordPid(agentName: string): Promise<Result<void, string>> {
+		const agent = this.agents.get(agentName);
+		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
+
+		const pidResult = await this.tmux.getPanePid(agent.pane);
+		if (!pidResult.ok) return pidResult;
+
+		agent.shellPid = pidResult.value;
+
+		const childResult = await this.probe.getChildPids(pidResult.value);
+		if (childResult.ok && childResult.value.length > 0) {
+			agent.agentPid = childResult.value[0];
+		}
+
+		return ok(undefined);
+	}
+
+	async checkHealth(agentName: string): Promise<Result<ProcessHealth, string>> {
+		const agent = this.agents.get(agentName);
+		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
+
+		if (!agent.shellPid) return ok("unknown");
+
+		if (!this.probe.isAlive(agent.shellPid)) return ok("dead");
+
+		if (agent.agentPid && !this.probe.isAlive(agent.agentPid)) {
+			const childResult = await this.probe.getChildPids(agent.shellPid);
+			if (childResult.ok && childResult.value.length === 0) {
+				return ok("dead");
+			}
+		}
+
+		return ok("alive");
+	}
+
+	async respawn(agentName: string): Promise<Result<void, string>> {
+		const agent = this.agents.get(agentName);
+		if (!agent) return err(`${AgentErrors.AGENT_NOT_FOUND}: ${agentName}`);
+
+		// Kill existing agent process if alive
+		if (agent.agentPid && this.probe.isAlive(agent.agentPid)) {
+			try {
+				process.kill(agent.agentPid, "SIGTERM");
+			} catch {
+				// already dead
+			}
+		}
+
+		// Send C-c to the pane to clean up
+		await this.tmux.sendKeys(agent.pane, "C-c");
+		await Bun.sleep(500);
+
+		// Re-launch CLI in the same pane
+		const command = agent.adapter.startCommand(
+			agent.model,
+			this.cwd,
+			agent.options,
+		);
+		const result = await this.tmux.sendText(agent.pane, command);
+		if (!result.ok) {
+			return err(`${AgentErrors.RESPAWN_FAILED}: ${result.error}`);
+		}
+
+		agent.respawnCount++;
+		agent.spawnedAt = new Date().toISOString();
+		agent.agentPid = undefined;
+
+		return ok(undefined);
+	}
+
+	async persistRegistry(): Promise<Result<void, string>> {
+		const agents: AgentRecord[] = [];
+		for (const [, agent] of this.agents) {
+			agents.push({
+				name: agent.name,
+				role: agent.role,
+				pane: agent.pane,
+				cliType: agent.cliType,
+				model: agent.model,
+				shellPid: agent.shellPid ?? 0,
+				agentPid: agent.agentPid,
+				spawnedAt: agent.spawnedAt ?? new Date().toISOString(),
+				respawnCount: agent.respawnCount,
+			});
+		}
+		const data: AgentRegistryData = {
+			sessionName: this.sessionName,
+			agents,
+			updatedAt: new Date().toISOString(),
+		};
+		return await this.registry.save(this.crewDir, data);
 	}
 }

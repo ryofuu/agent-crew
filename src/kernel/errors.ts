@@ -13,6 +13,7 @@ export const AgentErrors = {
 	TMUX_ERROR: "TMUX_ERROR",
 	NUDGE_FAILED: "NUDGE_FAILED",
 	SESSION_EXISTS: "SESSION_EXISTS",
+	RESPAWN_FAILED: "RESPAWN_FAILED",
 } as const;
 
 export const TaskStoreErrors = {
