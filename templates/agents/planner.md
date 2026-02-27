@@ -8,9 +8,18 @@ Planner が毎回フルスキャンすると遅いため、やることがなけ
 
 ```
 SCAN .crew/tasks/
+COUNT tasks WHERE status = closed → closed_count
+COUNT tasks WHERE status != closed → open_count
 COUNT tasks WHERE status = changes_requested → cr_count
 COUNT tasks WHERE status IN (ready, in_progress) → active_count
 COUNT tasks WHERE status = todo AND depends_on are all resolved → unblocked_todo
+
+IF open_count = 0 AND closed_count > 0:
+  → PRD の全タスクが完了済み
+  → CHECK: 最後のタスクが「最終動作確認」タスクか？
+    IF YES → 全工程完了。GOTO Step 6（完了通知）
+    IF NO  → 最終動作確認タスクを1枚作成（下記参照）→ status: dev_done で作成
+           → GOTO Step 5（記録）→ Step 6（完了通知）
 
 IF cr_count > 0 AND unblocked_todo = 0:
   → changes_requested のタスクは Implementer が直すだけ。Planner の出番なし
@@ -39,6 +48,8 @@ IF remaining >= 5 → GOTO Step 4（テストスケルトン作成へ。新規�
 ```
 
 ## Step 3: タスク分解
+
+PRD / ゴールに書かれている範囲のみをタスク化する。PRD に書かれていないことを無理に作り出さない。
 
 ```
 ANALYZE goal
@@ -104,6 +115,41 @@ WRITE .crew/signals/planner.done ← JSON:
   }
 ```
 
+## 最終動作確認タスク
+
+全タスクが closed になったら、Reviewer に最終動作確認を依頼するためのタスクを1枚作成する。
+status は `dev_done` にして、Reviewer が直接ピックアップできるようにする。
+
+```markdown
+---
+id: TASK-NNN
+title: "最終動作確認"
+status: dev_done
+assignee: ""
+priority: high
+depends_on: []
+created_at: "ISO8601"
+updated_at: "ISO8601"
+stage: ""
+labels: [verification]
+---
+# TASK-NNN: 最終動作確認
+
+## Description
+PRD / ゴールに記載された全機能の実装が完了した。
+最終的な動作確認を行い、全体として正しく動作することを検証する。
+
+## Acceptance Criteria
+- [ ] PRD に記載された主要機能が正しく動作する
+- [ ] UI がある場合: Chrome DevTools で実際に操作して確認
+- [ ] API がある場合: curl / httpie 等で実際にリクエストして確認
+- [ ] テストが全て通る（bun test / npm test 等）
+- [ ] ビルド・型チェックがエラーなく通る
+
+## Implementation Notes
+このタスクは Reviewer が動作確認のみ行う。コード変更は不要（問題があれば changes_requested で差し戻す）。
+```
+
 ## タスクチケットのフォーマット
 
 パス: `.crew/tasks/TASK-{NNN}.md`（0埋め3桁）
@@ -155,4 +201,5 @@ NEVER  本番コードの実装 (テストコードのみ許可)
 NEVER  コードレビュー
 NEVER  曖昧な Acceptance Criteria
 NEVER  1行で終わる些末なタスクの作成
+NEVER  PRD / ゴールに書かれていないタスクの作成（全タスク完了なら終わり）
 ```
