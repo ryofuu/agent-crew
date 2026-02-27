@@ -18,6 +18,50 @@ import { readConfig } from "../config.js";
 
 const AGENT_READY_TIMEOUT_MS = 15_000;
 
+// --- ログユーティリティ ---
+
+/** .crew/logs/ にタイムスタンプ付きでログを書き出す */
+class CrewLogger {
+	private stream: fs.WriteStream | null = null;
+	private logPath: string;
+
+	constructor(crewDir: string) {
+		const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+		this.logPath = path.join(crewDir, "logs", `crew-${timestamp}.log`);
+	}
+
+	/** ログファイルを開く */
+	async open(): Promise<void> {
+		const dir = path.dirname(this.logPath);
+		await fs.promises.mkdir(dir, { recursive: true });
+		this.stream = fs.createWriteStream(this.logPath, { flags: "a" });
+	}
+
+	/** ログ出力（ファイル + stdout） */
+	log(message: string): void {
+		const line = `[${new Date().toISOString()}] ${message}`;
+		console.log(message);
+		this.stream?.write(`${line}\n`);
+	}
+
+	/** エラー出力（ファイル + stderr） */
+	error(message: string): void {
+		const line = `[${new Date().toISOString()}] ERROR: ${message}`;
+		console.error(message);
+		this.stream?.write(`${line}\n`);
+	}
+
+	/** ログファイルを閉じる */
+	close(): void {
+		this.stream?.end();
+		this.stream = null;
+	}
+
+	getPath(): string {
+		return this.logPath;
+	}
+}
+
 interface AgentEntry {
 	name: string;
 	role: string;
@@ -50,6 +94,19 @@ async function loadContext(crewDir: string): Promise<string> {
 	const contextPath = path.join(crewDir, "CONTEXT.md");
 	try {
 		return await fs.promises.readFile(contextPath, "utf-8");
+	} catch {
+		return "";
+	}
+}
+
+/** ワークフロー定義YAMLを読み込む（エージェントに全体像を伝えるため） */
+async function loadWorkflowYaml(workflowName: string): Promise<string> {
+	const templatePath = path.join(
+		import.meta.dir,
+		`../../../templates/${workflowName}.yaml`,
+	);
+	try {
+		return await fs.promises.readFile(templatePath, "utf-8");
 	} catch {
 		return "";
 	}
@@ -94,19 +151,21 @@ async function writeRequestEntry(
 function buildPrompt(
 	roleTemplate: string,
 	goal: string,
+	role: string,
 	workflowName: string,
 	context: string,
+	workflowYaml: string,
 ): string {
 	const contextSection = context ? `\n## Shared Context\n\n${context}\n` : "";
+	const workflowSection = workflowYaml
+		? `\n## Workflow\n\nあなたは以下のワークフローの中で実行されています。あなたの役割は "${role}" ステージです。\n\n\`\`\`yaml\n${workflowYaml}\`\`\`\n`
+		: `\n## Workflow\n\nWorkflow: ${workflowName}\n`;
 	return `${roleTemplate}
 ${contextSection}
 ## Goal
 
 ${goal}
-
-## Workflow
-
-Workflow: ${workflowName}
+${workflowSection}
 Tasks directory: .crew/tasks/
 
 上記の指示とゴールに従って作業を開始してください。`;
@@ -152,7 +211,8 @@ async function promptAgent(
 	const roleTemplate = await loadRoleTemplate(role);
 	const context = await loadContext(crewDir);
 	const goal = await loadActiveGoal(crewDir);
-	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName, context);
+	const workflowYaml = await loadWorkflowYaml(workflowName);
+	const builtPrompt = buildPrompt(roleTemplate, goal, role, workflowName, context, workflowYaml);
 	await runner.waitForReady(agentName, AGENT_READY_TIMEOUT_MS);
 	const result = await runner.sendInitialPrompt(agentName, builtPrompt);
 	if (!result.ok) {
@@ -191,13 +251,24 @@ async function removeSignal(crewDir: string, role: string): Promise<void> {
 	}
 }
 
-async function ensureSignalsDir(crewDir: string): Promise<void> {
-	await fs.promises.mkdir(path.join(crewDir, "signals"), { recursive: true });
+/** signals ディレクトリを作成し、前回の残存シグナルをすべて削除する */
+async function cleanSignalsDir(crewDir: string): Promise<void> {
+	const dir = path.join(crewDir, "signals");
+	await fs.promises.mkdir(dir, { recursive: true });
+	try {
+		const files = await fs.promises.readdir(dir);
+		for (const file of files) {
+			await fs.promises.unlink(path.join(dir, file));
+		}
+	} catch {
+		// empty or inaccessible
+	}
 }
 
 // --- Poll loop ---
 
 interface PollContext {
+	logger: CrewLogger;
 	engine: WorkflowEnginePort;
 	runner: AgentRunnerPort;
 	crewDir: string;
@@ -229,16 +300,16 @@ async function tryAdvanceStage(
 
 	// Signal detected — clean up and advance
 	await removeSignal(ctx.crewDir, stageDef.role);
-	console.log(
+	ctx.logger.log(
 		`Stage '${currentStage.name}' completed (signal received). Advancing...`,
 	);
 	if (signal.tasks && signal.tasks.length > 0) {
-		console.log(`  Tasks: ${signal.tasks.join(", ")}`);
+		ctx.logger.log(`  Tasks: ${signal.tasks.join(", ")}`);
 	}
 
 	const advResult = await ctx.engine.advance();
 	if (!advResult.ok) {
-		console.error(`Error advancing: ${advResult.error}`);
+		ctx.logger.error(`Error advancing: ${advResult.error}`);
 		return "break";
 	}
 
@@ -249,12 +320,15 @@ async function tryAdvanceStage(
 	const nextIdx = newState.value.currentStageIndex;
 	// Detect loop: stage index went backwards → reset prompt tracking
 	if (nextIdx < state.currentStageIndex) {
+		ctx.logger.log(
+			`Loop detected: stage ${state.currentStageIndex} → ${nextIdx}. Resetting prompt tracking.`,
+		);
 		ctx.promptedStageIndex = -1;
 	}
 	const nextStage = newState.value.stages[nextIdx];
 	const nextDef = ctx.stages[nextIdx];
 	if (nextStage?.status === "active" && nextDef) {
-		console.log(`Prompting '${nextDef.role}' for stage '${nextStage.name}'...`);
+		ctx.logger.log(`Prompting '${nextDef.role}' for stage '${nextStage.name}'...`);
 		await promptAgent(
 			ctx.runner,
 			nextDef.role,
@@ -277,7 +351,7 @@ async function promptIfNeeded(ctx: PollContext): Promise<void> {
 	const stage = stateResult.value.stages[idx];
 	const def = ctx.stages[idx];
 	if (stage?.status === "active" && def && idx > ctx.promptedStageIndex) {
-		console.log(`Prompting '${def.role}' for stage '${stage.name}'...`);
+		ctx.logger.log(`Prompting '${def.role}' for stage '${stage.name}' (promptIfNeeded)...`);
 		await promptAgent(
 			ctx.runner,
 			def.role,
@@ -318,7 +392,7 @@ async function maybeNudgeAgent(ctx: PollContext): Promise<void> {
 		ctx.nudgeCount < ctx.maxNudges
 	) {
 		ctx.nudgeCount++;
-		console.log(
+		ctx.logger.log(
 			`Nudging '${stageDef.role}' (attempt ${ctx.nudgeCount}/${ctx.maxNudges})...`,
 		);
 		await ctx.runner.sendNudge(stageDef.role, NUDGE_MESSAGE);
@@ -341,16 +415,16 @@ async function maybeRecoverAgent(ctx: PollContext): Promise<void> {
 
 	const agentInfo = ctx.runner.getAgentInfo(stageDef.role);
 	if (agentInfo && agentInfo.respawnCount >= ctx.maxRespawns) {
-		console.error(
+		ctx.logger.error(
 			`Agent '${stageDef.role}' died but max respawns (${ctx.maxRespawns}) reached. Giving up.`,
 		);
 		return;
 	}
 
-	console.log(`Agent '${stageDef.role}' detected dead. Respawning...`);
+	ctx.logger.log(`Agent '${stageDef.role}' detected dead. Respawning...`);
 	const respawnResult = await ctx.runner.respawn(stageDef.role);
 	if (!respawnResult.ok) {
-		console.error(
+		ctx.logger.error(
 			`Respawn failed for '${stageDef.role}': ${respawnResult.error}`,
 		);
 		return;
@@ -373,10 +447,11 @@ async function maybeRecoverAgent(ctx: PollContext): Promise<void> {
 	// Reset nudge counter
 	ctx.lastActiveAt = Date.now();
 	ctx.nudgeCount = 0;
-	console.log(`Agent '${stageDef.role}' respawned and prompted.`);
+	ctx.logger.log(`Agent '${stageDef.role}' respawned and prompted.`);
 }
 
 async function pollLoop(
+	logger: CrewLogger,
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
 	crewDir: string,
@@ -390,6 +465,7 @@ async function pollLoop(
 	signal: AbortSignal,
 ): Promise<void> {
 	const ctx: PollContext = {
+		logger,
 		engine,
 		runner,
 		crewDir,
@@ -409,11 +485,11 @@ async function pollLoop(
 
 		const { status } = stateResult.value;
 		if (status === "completed") {
-			console.log("Workflow completed.");
+			logger.log("Workflow completed.");
 			break;
 		}
 		if (status === "error") {
-			console.error("Workflow error.");
+			logger.error("Workflow error.");
 			break;
 		}
 
@@ -544,7 +620,7 @@ export async function startCommand(
 		process.exit(1);
 	}
 
-	await ensureSignalsDir(crewDir);
+	await cleanSignalsDir(crewDir);
 	await runner.setupLayout(agents.length);
 
 	const autoApprove = options?.autoApprove || config.agent.auto_approve;
@@ -554,8 +630,13 @@ export async function startCommand(
 	await Bun.sleep(2000);
 	await recordAllPids(runner, agents);
 
-	console.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
-	console.log(`tmux session: crew-${projectName}`);
+	// ログファイル初期化
+	const logger = new CrewLogger(crewDir);
+	await logger.open();
+
+	logger.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
+	logger.log(`tmux session: crew-${projectName}`);
+	logger.log(`Log file: ${logger.getPath()}`);
 
 	const promptedStageIndex = await sendFirstPrompt(
 		engine,
@@ -567,7 +648,8 @@ export async function startCommand(
 
 	const abortController = new AbortController();
 	const cleanup = async () => {
-		console.log("\nShutting down...");
+		logger.log("Shutting down...");
+		logger.close();
 		abortController.abort();
 		await runner.destroySession();
 		await engine.stop();
@@ -583,6 +665,7 @@ export async function startCommand(
 	const maxNudges = config.agent.max_escalation_phase;
 	const maxRespawns = config.agent.max_respawns;
 	await pollLoop(
+		logger,
 		engine,
 		runner,
 		crewDir,
@@ -596,6 +679,7 @@ export async function startCommand(
 		abortController.signal,
 	);
 
+	logger.close();
 	const keepSession = options?.keepSession || config.tmux.keep_session;
 	if (keepSession) {
 		console.log(

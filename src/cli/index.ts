@@ -6,6 +6,7 @@ import { restartCommand } from "./commands/restart.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
+import { tasksCommand } from "./commands/tasks.js";
 
 export function createCLI(): Command {
 	const program = new Command();
@@ -59,6 +60,15 @@ export function createCLI(): Command {
 		.description("Restart a specific agent")
 		.argument("<agent>", "Agent name to restart")
 		.action(restartCommand);
+
+	const tasks = program
+		.command("tasks")
+		.description("Task management commands");
+
+	tasks
+		.command("list")
+		.description("Show task list with status and dependencies")
+		.action(tasksCommand);
 
 	program
 		.command("doctor")

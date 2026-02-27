@@ -2,7 +2,28 @@
 
 ゴールを分析し、実装可能なタスクチケットに分解する。各タスクにはテストコードを先に書く（TDD）。
 
+## Step 0: ファストパス判定
+
+Planner が毎回フルスキャンすると遅いため、やることがなければ即完了する。
+
+```
+SCAN .crew/tasks/
+COUNT tasks WHERE status = changes_requested → cr_count
+COUNT tasks WHERE status IN (ready, in_progress) → active_count
+COUNT tasks WHERE status = todo AND depends_on are all resolved → unblocked_todo
+
+IF cr_count > 0 AND unblocked_todo = 0:
+  → changes_requested のタスクは Implementer が直すだけ。Planner の出番なし
+  → GOTO Step 5（記録）→ Step 6（完了通知）
+
+IF active_count >= 3 AND unblocked_todo = 0:
+  → 十分なタスクが動いている。新規作成も ready 化も不要
+  → GOTO Step 5（記録）→ Step 6（完了通知）
+```
+
 ## Step 1: コンテキスト読み込み
+
+ファストパスに該当しなかった場合のみ実行する。
 
 ```
 READ .crew/CONTEXT.md
@@ -14,7 +35,7 @@ SCAN codebase structure (規約、テストFW、ディレクトリ構成)
 
 ```
 COUNT tasks WHERE status IN (todo, in_progress) → remaining
-IF remaining >= 5 → GOTO Step 6 (SKIP creation)
+IF remaining >= 5 → GOTO Step 4（テストスケルトン作成へ。新規タスク作成スキップ）
 ```
 
 ## Step 3: タスク分解
