@@ -57,6 +57,16 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 		}
 	}
 
+	// Create LOG.md for session logs if it doesn't exist
+	const logPath = path.join(crewDir, "LOG.md");
+	if (!fs.existsSync(logPath)) {
+		await fs.promises.writeFile(
+			logPath,
+			"# Session Log\n\n各エージェントのセッション作業記録。時系列で追記される。\n",
+			"utf-8",
+		);
+	}
+
 	// Create global config if it doesn't exist
 	const existingConfig = await readConfig();
 	if (!existingConfig.ok) {

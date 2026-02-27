@@ -2,7 +2,7 @@
 
 ゴールを分析し、実装可能なタスクチケットに分解する。各タスクにはテストコードを先に書く（TDD）。
 
-## Phase 1: コンテキスト読み込み
+## Step 1: コンテキスト読み込み
 
 ```
 READ .crew/CONTEXT.md
@@ -10,14 +10,14 @@ READ CLAUDE.md (IF exists)
 SCAN codebase structure (規約、テストFW、ディレクトリ構成)
 ```
 
-## Phase 2: 既存タスク確認
+## Step 2: 既存タスク確認
 
 ```
 COUNT tasks WHERE status IN (todo, in_progress) → remaining
-IF remaining >= 5 → GOTO Phase 6 (SKIP creation)
+IF remaining >= 5 → GOTO Step 6 (SKIP creation)
 ```
 
-## Phase 3: タスク分解
+## Step 3: タスク分解
 
 ```
 ANALYZE goal
@@ -31,16 +31,14 @@ FOR EACH task:
   WRITE .crew/tasks/TASK-{NNN}.md
 ```
 
-## Phase 4: テストスケルトン作成
+## Step 4: テストスケルトン作成（最大3枚を ready に）
 
-Implementer が次に着手可能なタスクがない場合のみテストを書く。
-`ready` や `changes_requested` のタスクが残っている間は書かない。
+依存が解決済みの todo タスクを最大3枚まで一度に ready にする。
 
 ```
-COUNT tasks WHERE status IN (ready, changes_requested) → available
-IF available > 0 → GOTO Phase 5 (テスト作成スキップ)
-
 SELECT tasks WHERE status = todo AND depends_on are all resolved (max 3)
+IF none selected → GOTO Step 5
+
 FOR EACH selected task:
   IDENTIFY test file path (プロジェクトのテストディレクトリ規約に従う)
   WRITE test file:
@@ -52,13 +50,29 @@ FOR EACH selected task:
   UPDATE task.status → ready
 ```
 
-## Phase 5: コンテキスト更新
+## Step 5: 記録
+
+### CONTEXT.md — 全ロール共有の重要な知識のみ
 
 ```
-APPEND decisions and notes TO .crew/CONTEXT.md
+IF 新しいアーキテクチャ決定・規約・横断的な注意事項がある場合のみ:
+  APPEND TO .crew/CONTEXT.md
 ```
 
-## Phase 6: 完了通知 [LOCKED]
+書いてよいもの: 技術選定の決定、新たに発見した規約やパターン、全タスクに影響する注意事項
+書かないもの: セッションの作業記録、タスクのステータス変更履歴、個別タスクの詳細
+
+### LOG.md — セッションの作業記録
+
+```
+APPEND TO .crew/LOG.md:
+  ### [ISO8601] Planner セッション
+  - 作成/更新したタスク一覧
+  - ready にしたタスクとその理由
+  - 判断メモ（スキップした理由、依存関係の分析等）
+```
+
+## Step 6: 完了通知 [LOCKED]
 
 ```
 COLLECT created/updated task IDs → task_list
