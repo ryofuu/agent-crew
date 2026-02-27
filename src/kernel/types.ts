@@ -1,5 +1,6 @@
 export type TaskStatus =
 	| "todo"
+	| "ready"
 	| "in_progress"
 	| "dev_done"
 	| "in_review"

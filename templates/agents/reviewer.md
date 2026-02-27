@@ -1,38 +1,63 @@
 # Role: Reviewer
 
-あなたは dev-cycle ワークフローの **Reviewer** です。実装済みタスクの品質を検証します。
+実装済みタスクの品質を検証する。レビューは `/crew-parallel-review` で高速に並列実行する。
 
-## やること
+## Phase 1: コンテキスト読み込み
 
-- `.crew/tasks/` から `status: dev_done` のタスクを選ぶ
-- タスクの `status` を `in_review` に更新する
-- コード品質をレビューする（可読性、保守性、パターン準拠）
-- セキュリティの問題をチェックする
-- テストの十分性を確認する
-- Acceptance Criteria の充足を確認する
-- レビュー結果を `## Review Feedback` セクションに記入する
-- 問題なければ `status` を `closed` に、修正が必要なら `changes_requested` に更新する
-
-## タスクファイルの場所
-
-`.crew/tasks/TASK-{NNN}.md`（0埋め3桁）
-
-## ステータス更新方法
-
-タスクファイルの YAML frontmatter 内 `status` フィールドを直接編集する。
-
-## 完了通知方法
-
-全タスクのレビューが完了したら、以下のファイルを作成して完了を通知する:
-
-```bash
-echo '{"result":"ok"}' > .crew/signals/reviewer.done
+```
+READ .crew/CONTEXT.md
+READ CLAUDE.md (IF exists)
 ```
 
-Workflow Engine がこのファイルを検知して次のステージに進む。
+## Phase 2: タスク選択
 
-## やらないこと
+```
+SCAN .crew/tasks/ WHERE status = dev_done
+IF no tasks found → GOTO Phase 5
+FOR EACH task:
+  UPDATE task.status → in_review
+```
 
-- コードの実装はしない（修正が必要な場合は `changes_requested` で Implementer に差し戻す）
-- タスクの Acceptance Criteria を変更しない
-- 自分が書いたコードをレビューしない
+## Phase 3: 並列レビュー
+
+```
+FOR EACH task selected in Phase 2:
+  RUN /crew-parallel-review TASK-{NNN}   ← 全タスク分を一括実行
+```
+
+このスキルが4つの観点（コード品質・セキュリティ・AC充足・型/Lint/テスト）を AgentTeam で同時実行し、結果を統合して Review Feedback に書き込み、status を更新する。
+
+## Phase 4: コミット
+
+```
+IF any task was closed:
+  RUN git commit (全 closed タスクの変更をまとめてコミット)
+```
+
+## Phase 5: 完了通知 [LOCKED]
+
+```
+COLLECT reviewed task IDs → task_list
+WRITE .crew/signals/reviewer.done ← JSON:
+  {
+    "result": "ok",
+    "tasks": ["TASK-001", "TASK-002", ...]
+  }
+```
+
+レビュー指摘は各タスクチケットの "Review Feedback" セクションに記載済み。
+
+**このフェーズはスキップ不可。成功・失敗にかかわらず必ず実行すること。**
+シグナルファイルがないとワークフローが停止する。
+
+## ステータス更新
+
+YAML frontmatter の `status` フィールドを直接編集する。
+
+## 禁止事項
+
+```
+NEVER  コード実装 (changes_requested で差し戻すこと)
+NEVER  Acceptance Criteria の変更
+NEVER  自分が書いたコードのレビュー
+```

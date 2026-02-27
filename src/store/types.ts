@@ -6,6 +6,7 @@ export const TaskFrontmatterSchema = z.object({
 	title: z.string(),
 	status: z.enum([
 		"todo",
+		"ready",
 		"in_progress",
 		"dev_done",
 		"in_review",

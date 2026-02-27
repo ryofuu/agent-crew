@@ -1,7 +1,8 @@
 import type { TaskStatus } from "../kernel/index.js";
 
 const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-	todo: ["in_progress"],
+	todo: ["ready"],
+	ready: ["in_progress"],
 	in_progress: ["dev_done", "blocked"],
 	dev_done: ["in_review"],
 	in_review: ["closed", "changes_requested"],

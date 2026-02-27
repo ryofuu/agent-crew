@@ -2,12 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { isValidTransition } from "../../src/store/transitions.js";
 
 describe("isValidTransition", () => {
-	test("todo → in_progress is valid", () => {
-		expect(isValidTransition("todo", "in_progress")).toBe(true);
+	test("todo → ready is valid", () => {
+		expect(isValidTransition("todo", "ready")).toBe(true);
+	});
+
+	test("todo → in_progress is invalid", () => {
+		expect(isValidTransition("todo", "in_progress")).toBe(false);
 	});
 
 	test("todo → dev_done is invalid", () => {
 		expect(isValidTransition("todo", "dev_done")).toBe(false);
+	});
+
+	test("ready → in_progress is valid", () => {
+		expect(isValidTransition("ready", "in_progress")).toBe(true);
 	});
 
 	test("in_progress → dev_done is valid", () => {

@@ -78,6 +78,8 @@ describe("TaskStore", () => {
 	describe("update", () => {
 		test("updates status with valid transition", async () => {
 			await store.create({ title: "Update me" });
+			const ready = await store.update("TASK-001", { status: "ready" });
+			expect(ready.ok).toBe(true);
 			const result = await store.update("TASK-001", { status: "in_progress" });
 			expect(result.ok).toBe(true);
 			if (result.ok) {
@@ -118,6 +120,7 @@ describe("TaskStore", () => {
 		test("filters by status", async () => {
 			await store.create({ title: "Todo task" });
 			await store.create({ title: "Another todo" });
+			await store.update("TASK-001", { status: "ready" });
 			await store.update("TASK-001", { status: "in_progress" });
 
 			const result = await store.list({ status: "todo" });
@@ -131,6 +134,7 @@ describe("TaskStore", () => {
 		test("filters by multiple statuses", async () => {
 			await store.create({ title: "A" });
 			await store.create({ title: "B" });
+			await store.update("TASK-001", { status: "ready" });
 			await store.update("TASK-001", { status: "in_progress" });
 
 			const result = await store.list({ status: ["todo", "in_progress"] });
@@ -197,13 +201,13 @@ describe("TaskStore", () => {
 			await Bun.sleep(1200);
 
 			// Modify the task to trigger callback
-			await store.update("TASK-001", { status: "in_progress" });
+			await store.update("TASK-001", { status: "ready" });
 
 			// Wait for poll cycle
 			await Bun.sleep(1200);
 
 			expect(callbackTasks.length).toBeGreaterThan(0);
-			expect(callbackTasks[0]?.frontmatter.status).toBe("in_progress");
+			expect(callbackTasks[0]?.frontmatter.status).toBe("ready");
 
 			stopWatch();
 		});

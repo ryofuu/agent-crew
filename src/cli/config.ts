@@ -24,6 +24,7 @@ const ConfigSchema = z.object({
 	tmux: z
 		.object({
 			session_prefix: z.string().default("crew"),
+			keep_session: z.boolean().default(false),
 		})
 		.default({}),
 	agent: z

@@ -35,6 +35,7 @@ export interface AgentRunnerPort {
 	createSession(projectName: string): Promise<Result<void, string>>;
 	destroySession(): Promise<Result<void, string>>;
 	setupLayout(agentCount: number): Promise<Result<void, string>>;
+	getSessionName(): string;
 }
 
 interface AgentInfo {

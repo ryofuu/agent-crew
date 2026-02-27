@@ -40,13 +40,24 @@ async function loadRoleTemplate(role: string): Promise<string> {
 	}
 }
 
+async function loadContext(crewDir: string): Promise<string> {
+	const contextPath = path.join(crewDir, "CONTEXT.md");
+	try {
+		return await fs.promises.readFile(contextPath, "utf-8");
+	} catch {
+		return "";
+	}
+}
+
 function buildPrompt(
 	roleTemplate: string,
 	goal: string,
 	workflowName: string,
+	context: string,
 ): string {
+	const contextSection = context ? `\n## Shared Context\n\n${context}\n` : "";
 	return `${roleTemplate}
-
+${contextSection}
 ## Goal
 
 ${goal}
@@ -86,6 +97,7 @@ async function promptAgent(
 	goal: string,
 	workflowName: string,
 	contextReset: boolean,
+	crewDir: string,
 ): Promise<void> {
 	if (contextReset) {
 		console.log(`Resetting context for '${agentName}'...`);
@@ -97,7 +109,8 @@ async function promptAgent(
 		}
 	}
 	const roleTemplate = await loadRoleTemplate(role);
-	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName);
+	const context = await loadContext(crewDir);
+	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName, context);
 	await runner.waitForReady(agentName, AGENT_READY_TIMEOUT_MS);
 	const result = await runner.sendInitialPrompt(agentName, builtPrompt);
 	if (!result.ok) {
@@ -111,12 +124,20 @@ function signalPath(crewDir: string, role: string): string {
 	return path.join(crewDir, "signals", `${role}.done`);
 }
 
-async function checkSignal(crewDir: string, role: string): Promise<boolean> {
+interface SignalPayload {
+	result: string;
+	tasks?: string[];
+}
+
+async function readSignal(
+	crewDir: string,
+	role: string,
+): Promise<SignalPayload | null> {
 	try {
-		await fs.promises.access(signalPath(crewDir, role));
-		return true;
+		const raw = await fs.promises.readFile(signalPath(crewDir, role), "utf-8");
+		return JSON.parse(raw) as SignalPayload;
 	} catch {
-		return false;
+		return null;
 	}
 }
 
@@ -161,14 +182,17 @@ async function tryAdvanceStage(
 	if (currentStage?.status !== "active" || !stageDef) return "continue";
 
 	// Check for signal file: .crew/signals/{role}.done
-	const done = await checkSignal(ctx.crewDir, stageDef.role);
-	if (!done) return "continue";
+	const signal = await readSignal(ctx.crewDir, stageDef.role);
+	if (!signal) return "continue";
 
 	// Signal detected — clean up and advance
 	await removeSignal(ctx.crewDir, stageDef.role);
 	console.log(
 		`Stage '${currentStage.name}' completed (signal received). Advancing...`,
 	);
+	if (signal.tasks && signal.tasks.length > 0) {
+		console.log(`  Tasks: ${signal.tasks.join(", ")}`);
+	}
 
 	const advResult = await ctx.engine.advance();
 	if (!advResult.ok) {
@@ -196,6 +220,7 @@ async function tryAdvanceStage(
 			ctx.goal,
 			ctx.workflowName,
 			nextDef.context_reset,
+			ctx.crewDir,
 		);
 		ctx.promptedStageIndex = nextIdx;
 	}
@@ -219,6 +244,7 @@ async function promptIfNeeded(ctx: PollContext): Promise<void> {
 			ctx.goal,
 			ctx.workflowName,
 			def.context_reset,
+			ctx.crewDir,
 		);
 		ctx.promptedStageIndex = idx;
 	}
@@ -319,6 +345,60 @@ async function pollLoop(
 interface StartOptions {
 	autoApprove?: boolean;
 	nudgeInterval?: number;
+	keepSession?: boolean;
+}
+
+async function spawnAgents(
+	runner: AgentRunnerPort,
+	agents: AgentEntry[],
+	autoApprove: boolean,
+): Promise<void> {
+	if (autoApprove) {
+		console.log("Auto-approve mode enabled.");
+	}
+	const spawnOptions = autoApprove ? { autoApprove: true } : undefined;
+	for (const agent of agents) {
+		const result = await runner.spawn(
+			agent.name,
+			agent.role,
+			agent.cliType,
+			agent.model,
+			spawnOptions,
+		);
+		if (!result.ok) {
+			console.error(`Error spawning ${agent.name}: ${result.error}`);
+		}
+	}
+}
+
+async function sendFirstPrompt(
+	engine: WorkflowEnginePort,
+	runner: AgentRunnerPort,
+	stageDefs: StageDefinition[],
+	goal: string,
+	workflowName: string,
+	crewDir: string,
+): Promise<number> {
+	const stateResult = await engine.getState();
+	if (!stateResult.ok) return -1;
+
+	const idx = stateResult.value.currentStageIndex;
+	const stage = stateResult.value.stages[idx];
+	const def = stageDefs[idx];
+	if (stage?.status === "active" && def) {
+		console.log(`Sending initial prompt to '${def.role}'...`);
+		await promptAgent(
+			runner,
+			def.role,
+			def.role,
+			goal,
+			workflowName,
+			def.context_reset,
+			crewDir,
+		);
+		return idx;
+	}
+	return -1;
 }
 
 export async function startCommand(
@@ -362,54 +442,24 @@ export async function startCommand(
 		process.exit(1);
 	}
 
-	// Ensure signals directory exists
 	await ensureSignalsDir(crewDir);
-
 	await runner.setupLayout(agents.length);
 
 	const autoApprove = options?.autoApprove || config.agent.auto_approve;
-	if (autoApprove) {
-		console.log("Auto-approve mode enabled.");
-	}
-	const spawnOptions = autoApprove ? { autoApprove: true } : undefined;
-	for (const agent of agents) {
-		const result = await runner.spawn(
-			agent.name,
-			agent.role,
-			agent.cliType,
-			agent.model,
-			spawnOptions,
-		);
-		if (!result.ok) {
-			console.error(`Error spawning ${agent.name}: ${result.error}`);
-		}
-	}
+	await spawnAgents(runner, agents, autoApprove);
 
 	console.log(`Workflow '${workflowName}' started with goal: "${goal}"`);
 	console.log(`tmux session: crew-${projectName}`);
 
-	// Send initial prompt to the first active stage's agent
-	let promptedStageIndex = -1;
-	const stateResult = await engine.getState();
-	if (stateResult.ok) {
-		const idx = stateResult.value.currentStageIndex;
-		const stage = stateResult.value.stages[idx];
-		const def = stageDefs[idx];
-		if (stage?.status === "active" && def) {
-			console.log(`Sending initial prompt to '${def.role}'...`);
-			await promptAgent(
-				runner,
-				def.role,
-				def.role,
-				goal,
-				workflowName,
-				def.context_reset,
-			);
-			promptedStageIndex = idx;
-		}
-	}
+	const promptedStageIndex = await sendFirstPrompt(
+		engine,
+		runner,
+		stageDefs,
+		goal,
+		workflowName,
+		crewDir,
+	);
 
-	// Set up signal handlers for graceful cleanup
 	const abortController = new AbortController();
 	const cleanup = async () => {
 		console.log("\nShutting down...");
@@ -440,5 +490,13 @@ export async function startCommand(
 		abortController.signal,
 	);
 
-	await runner.destroySession();
+	const keepSession = options?.keepSession || config.tmux.keep_session;
+	if (keepSession) {
+		console.log(
+			`Workflow completed. tmux session kept alive: ${runner.getSessionName()}`,
+		);
+		console.log("Run 'crew stop' to remove the session.");
+	} else {
+		await runner.destroySession();
+	}
 }

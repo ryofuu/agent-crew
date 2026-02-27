@@ -27,6 +27,26 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	// Create initial state.json
 	await fs.promises.writeFile(path.join(crewDir, "state.json"), "{}", "utf-8");
 
+	// Create CONTEXT.md from template if it doesn't exist
+	const contextPath = path.join(crewDir, "CONTEXT.md");
+	if (!fs.existsSync(contextPath)) {
+		const templatePath = path.join(
+			import.meta.dir,
+			"../../../templates/CONTEXT.md",
+		);
+		try {
+			const template = await fs.promises.readFile(templatePath, "utf-8");
+			await fs.promises.writeFile(contextPath, template, "utf-8");
+		} catch {
+			// template not found, create minimal
+			await fs.promises.writeFile(
+				contextPath,
+				"# Shared Context\n\n<!-- ワークフロー間で共有するコンテキストを記述 -->\n",
+				"utf-8",
+			);
+		}
+	}
+
 	// Create global config if it doesn't exist
 	const existingConfig = await readConfig();
 	if (!existingConfig.ok) {

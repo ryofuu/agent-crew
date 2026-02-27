@@ -107,7 +107,12 @@ describe("integration: workflow cycle", () => {
 		expect(taskId).toBe("TASK-001");
 		expect(createResult.value.frontmatter.status).toBe("todo");
 
-		// todo → in_progress
+		// todo → ready
+		const rd = await store.update(taskId, { status: "ready" });
+		expect(rd.ok).toBe(true);
+		if (rd.ok) expect(rd.value.frontmatter.status).toBe("ready");
+
+		// ready → in_progress
 		const ip = await store.update(taskId, {
 			status: "in_progress",
 			assignee: "implementer-1",
@@ -290,6 +295,7 @@ describe("integration: workflow cycle", () => {
 		}
 
 		// 5. Update task 1 through lifecycle
+		await store.update("TASK-001", { status: "ready" });
 		await store.update("TASK-001", { status: "in_progress" });
 		await store.update("TASK-001", { status: "dev_done" });
 		await store.update("TASK-001", { status: "in_review" });
@@ -331,7 +337,8 @@ describe("integration: workflow cycle", () => {
 
 		const id = createResult.value.frontmatter.id;
 
-		// todo → in_progress → dev_done → in_review → changes_requested
+		// todo → ready → in_progress → dev_done → in_review → changes_requested
+		await store.update(id, { status: "ready" });
 		await store.update(id, { status: "in_progress" });
 		await store.update(id, { status: "dev_done" });
 		await store.update(id, { status: "in_review" });

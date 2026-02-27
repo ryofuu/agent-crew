@@ -31,6 +31,10 @@ export function createCLI(): Command {
 			"Override nudge interval in seconds",
 			Number.parseInt,
 		)
+		.option(
+			"--keep-session",
+			"Keep tmux session alive after workflow completes",
+		)
 		.action(startCommand);
 
 	program

@@ -1,7 +1,7 @@
 # Workflow Status Board
 
-**Current Phase**: Review (011/012) R1 — Both CHANGES_REQUESTED
-**Updated**: 2026-02-25T16:41:00+09:00
+**Current Phase**: Manual implementation (018-020) — Closed
+**Updated**: 2026-02-27T00:00:00+09:00
 **Goal**: agent-crew Phase 1 MVP 実装（dev-cycle ワークフロー最小動作版）+ Phase 2 機能追加
 
 ## Ticket Summary
@@ -14,7 +14,7 @@
 | dev_done | 0 |
 | changes_requested | 3 |
 | in_review | 0 |
-| closed | 10 |
+| closed | 13 |
 
 ## Active Work
 
@@ -35,6 +35,9 @@
 | TICKET-013 | ゲート承認後プロンプト未送信バグ | implementer-1 | closed | critical | N/A (手動修正) |
 | TICKET-015 | context_reset で /clear 送信に変更 | implementer-1 | closed | high | N/A (手動修正) |
 | TICKET-016 | idle 検知 & 自動ナッジ + .crew/ 整理 | implementer-1 | closed | high | N/A (手動修正) |
+| TICKET-018 | シグナルファイルにペイロード追加 | - | closed | high | N/A (手動実装) |
+| TICKET-019 | 申し送りをタスクチケット内に集約 | - | closed | high | N/A (手動実装) |
+| TICKET-020 | startCommand の complexity 解消 | - | closed | medium | N/A (手動実装) |
 
 ## Dependency Graph
 
