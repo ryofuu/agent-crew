@@ -1,6 +1,6 @@
 # Workflow Status Board
 
-**Current Phase**: Manual implementation (018-020) — Closed
+**Current Phase**: Manual implementation (018-021) — Closed
 **Updated**: 2026-02-27T00:00:00+09:00
 **Goal**: agent-crew Phase 1 MVP 実装（dev-cycle ワークフロー最小動作版）+ Phase 2 機能追加
 
@@ -14,7 +14,7 @@
 | dev_done | 0 |
 | changes_requested | 3 |
 | in_review | 0 |
-| closed | 13 |
+| closed | 14 |
 
 ## Active Work
 
@@ -38,6 +38,7 @@
 | TICKET-018 | シグナルファイルにペイロード追加 | - | closed | high | N/A (手動実装) |
 | TICKET-019 | 申し送りをタスクチケット内に集約 | - | closed | high | N/A (手動実装) |
 | TICKET-020 | startCommand の complexity 解消 | - | closed | medium | N/A (手動実装) |
+| TICKET-021 | REQUEST.md による動的依頼管理 | - | closed | high | N/A (手動実装) |
 
 ## Dependency Graph
 
@@ -61,7 +62,7 @@ TICKET-001 (プロジェクト初期化) ✅
 
 - **TypeScript**: `bun tsc --noEmit` ✅ 0 errors
 - **Biome lint**: `bun run lint` ✅ 0 errors
-- **Tests**: `bun test` ✅ 109 pass, 0 fail
+- **Tests**: `bun test` ✅ 123 pass, 0 fail
 
 ## TICKET-011 R1 Review Summary
 

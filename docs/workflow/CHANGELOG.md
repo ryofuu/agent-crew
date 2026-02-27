@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-02-27 — TICKET-021: REQUEST.md による動的依頼管理
+
+**担当**: 手動実装
+
+### 変更概要
+
+- `.crew/REQUEST.md` でワークフロー稼働中に依頼を動的に追加・変更・完了マーク可能に
+- `promptAgent` が毎回 REQUEST.md からアクティブな依頼を読み込むように変更
+- `crew init` で REQUEST.md テンプレートを自動作成
+- `crew start` で goal を REQUEST.md にタイムスタンプ付きで追記
+
+---
+
 ## 2026-02-25 — Plan フェーズ完了
 
 **担当**: Planner
