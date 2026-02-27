@@ -7,7 +7,13 @@ import type {
 	StageDefinition,
 	WorkflowEnginePort,
 } from "../../workflow/index.js";
-import { WorkflowEngine } from "../../workflow/index.js";
+import {
+	formatNewEntry,
+	getActiveGoal,
+	parseRequest,
+	readState,
+	WorkflowEngine,
+} from "../../workflow/index.js";
 import { readConfig } from "../config.js";
 
 const AGENT_READY_TIMEOUT_MS = 15_000;
@@ -47,6 +53,42 @@ async function loadContext(crewDir: string): Promise<string> {
 	} catch {
 		return "";
 	}
+}
+
+async function loadActiveGoal(crewDir: string): Promise<string> {
+	const requestPath = path.join(crewDir, "REQUEST.md");
+	try {
+		const content = await fs.promises.readFile(requestPath, "utf-8");
+		const entries = parseRequest(content);
+		const goal = getActiveGoal(entries);
+		if (goal) return goal;
+	} catch {
+		// REQUEST.md not found — fall through to state.json
+	}
+	const stateResult = await readState(crewDir);
+	if (stateResult.ok) return stateResult.value.goal;
+	return "";
+}
+
+async function writeRequestEntry(
+	crewDir: string,
+	title: string,
+	body: string,
+): Promise<void> {
+	const requestPath = path.join(crewDir, "REQUEST.md");
+	const entry = formatNewEntry(title, body);
+	let existing = "";
+	try {
+		existing = await fs.promises.readFile(requestPath, "utf-8");
+	} catch {
+		// file doesn't exist yet
+	}
+	const content = existing
+		? `${existing.trimEnd()}\n\n${entry}\n`
+		: `# Request\n\n${entry}\n`;
+	const tmpPath = `${requestPath}.tmp`;
+	await fs.promises.writeFile(tmpPath, content, "utf-8");
+	await fs.promises.rename(tmpPath, requestPath);
 }
 
 function buildPrompt(
@@ -94,7 +136,6 @@ async function promptAgent(
 	runner: AgentRunnerPort,
 	agentName: string,
 	role: string,
-	goal: string,
 	workflowName: string,
 	contextReset: boolean,
 	crewDir: string,
@@ -110,6 +151,7 @@ async function promptAgent(
 	}
 	const roleTemplate = await loadRoleTemplate(role);
 	const context = await loadContext(crewDir);
+	const goal = await loadActiveGoal(crewDir);
 	const builtPrompt = buildPrompt(roleTemplate, goal, workflowName, context);
 	await runner.waitForReady(agentName, AGENT_READY_TIMEOUT_MS);
 	const result = await runner.sendInitialPrompt(agentName, builtPrompt);
@@ -160,7 +202,6 @@ interface PollContext {
 	runner: AgentRunnerPort;
 	crewDir: string;
 	stages: StageDefinition[];
-	goal: string;
 	workflowName: string;
 	promptedStageIndex: number;
 	nudgeIntervalMs: number;
@@ -217,7 +258,6 @@ async function tryAdvanceStage(
 			ctx.runner,
 			nextDef.role,
 			nextDef.role,
-			ctx.goal,
 			ctx.workflowName,
 			nextDef.context_reset,
 			ctx.crewDir,
@@ -241,7 +281,6 @@ async function promptIfNeeded(ctx: PollContext): Promise<void> {
 			ctx.runner,
 			def.role,
 			def.role,
-			ctx.goal,
 			ctx.workflowName,
 			def.context_reset,
 			ctx.crewDir,
@@ -291,7 +330,6 @@ async function pollLoop(
 	runner: AgentRunnerPort,
 	crewDir: string,
 	stages: StageDefinition[],
-	goal: string,
 	workflowName: string,
 	promptedStageIndex: number,
 	pollInterval: number,
@@ -304,7 +342,6 @@ async function pollLoop(
 		runner,
 		crewDir,
 		stages,
-		goal,
 		workflowName,
 		promptedStageIndex,
 		nudgeIntervalMs,
@@ -375,7 +412,6 @@ async function sendFirstPrompt(
 	engine: WorkflowEnginePort,
 	runner: AgentRunnerPort,
 	stageDefs: StageDefinition[],
-	goal: string,
 	workflowName: string,
 	crewDir: string,
 ): Promise<number> {
@@ -391,7 +427,6 @@ async function sendFirstPrompt(
 			runner,
 			def.role,
 			def.role,
-			goal,
 			workflowName,
 			def.context_reset,
 			crewDir,
@@ -428,6 +463,9 @@ export async function startCommand(
 		process.exit(1);
 	}
 
+	// Write goal to REQUEST.md
+	await writeRequestEntry(crewDir, goal, "");
+
 	const stageDefsResult = await engine.getStageDefinitions();
 	if (!stageDefsResult.ok) {
 		console.error(`Error: ${stageDefsResult.error}`);
@@ -455,7 +493,6 @@ export async function startCommand(
 		engine,
 		runner,
 		stageDefs,
-		goal,
 		workflowName,
 		crewDir,
 	);
@@ -481,7 +518,6 @@ export async function startCommand(
 		runner,
 		crewDir,
 		stageDefs,
-		goal,
 		workflowName,
 		promptedStageIndex,
 		pollInterval,

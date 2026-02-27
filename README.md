@@ -108,6 +108,31 @@ crew start dev-cycle "Build feature X"
        Done
 ```
 
+### Dynamic Request Management (REQUEST.md)
+
+`.crew/REQUEST.md` allows you to add, modify, or complete requests while a workflow is running. Each stage's agent reads only the active (non-done) requests, so you can intervene mid-workflow without restarting.
+
+```markdown
+# Request
+
+## [2026-02-27 14:30] Add user authentication
+
+Implement login with email/password and JWT tokens.
+
+## [done] [2026-02-27 14:45] Create database tables
+
+Add users table.
+
+## [2026-02-27 15:10] Improve error handling
+
+Improve UX on API errors.
+```
+
+- `## [YYYY-MM-DD HH:MM] Title` — Active request (sent to agents)
+- `## [done] [YYYY-MM-DD HH:MM] Title` — Completed request (excluded from agent prompts)
+
+When you run `crew start`, the goal is automatically appended to REQUEST.md with a timestamp. You can manually edit this file at any time to add new requests or mark existing ones as done.
+
 ### Task File Format
 
 Tasks are Markdown files with YAML frontmatter, stored in `.crew/tasks/`:

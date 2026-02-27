@@ -27,6 +27,16 @@ export async function initCommand(options: { force?: boolean }): Promise<void> {
 	// Create initial state.json
 	await fs.promises.writeFile(path.join(crewDir, "state.json"), "{}", "utf-8");
 
+	// Create REQUEST.md template if it doesn't exist
+	const requestPath = path.join(crewDir, "REQUEST.md");
+	if (!fs.existsSync(requestPath)) {
+		await fs.promises.writeFile(
+			requestPath,
+			"# Request\n\n<!-- crew start で自動追記されます。手動で依頼を追加することもできます。 -->\n<!-- 完了した依頼は ## [done] [YYYY-MM-DD HH:MM] タイトル に変更してください。 -->\n",
+			"utf-8",
+		);
+	}
+
 	// Create CONTEXT.md from template if it doesn't exist
 	const contextPath = path.join(crewDir, "CONTEXT.md");
 	if (!fs.existsSync(contextPath)) {
